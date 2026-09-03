@@ -1,13 +1,14 @@
-package com.example.gptest
+package com.example.gptest.ui
 
 import android.annotation.SuppressLint
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
+import com.example.gptest.R
+import com.example.gptest.business.QuoteParser
+import com.example.gptest.business.QuoteSnapshot
 
 class QuoteListAdapter(
     private val onClick: (QuoteSnapshot) -> Unit,
@@ -43,7 +44,6 @@ class QuoteListAdapter(
 
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val content: View = itemView.findViewById(R.id.quoteRowContent)
-        private val dragHandle: ImageView = itemView.findViewById(R.id.ivDragHandle)
         private val tvName: TextView = itemView.findViewById(R.id.tvName)
         private val tvCode: TextView = itemView.findViewById(R.id.tvCode)
         private val tvPrice: TextView = itemView.findViewById(R.id.tvRowPrice)
@@ -60,20 +60,16 @@ class QuoteListAdapter(
             content.setBackgroundResource(
                 if (selected) R.drawable.bg_quote_row_selected else R.drawable.bg_quote_row
             )
-            dragHandle.visibility = if (dragEnabled) View.VISIBLE else View.GONE
-            dragHandle.setOnTouchListener { _, event ->
-                if (dragEnabled && event.actionMasked == MotionEvent.ACTION_DOWN) {
-                    onStartDrag(this)
-                    true
-                } else {
-                    false
-                }
-            }
             content.setOnTouchListener(
                 SwipeToDeleteTouchListener(
                     content = content,
                     onClick = { onClick(quote) },
-                    onDelete = { onDelete(quote.requestCode) }
+                    onDelete = { onDelete(quote.requestCode) },
+                    onLongPress = if (dragEnabled) {
+                        { onStartDrag(this) }
+                    } else {
+                        null
+                    }
                 )
             )
         }

@@ -1,4 +1,4 @@
-package com.example.gptest
+package com.example.gptest.data
 
 import android.content.Context
 import androidx.room.Database

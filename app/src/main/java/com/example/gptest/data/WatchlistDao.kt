@@ -1,4 +1,4 @@
-package com.example.gptest
+package com.example.gptest.data
 
 import androidx.room.Dao
 import androidx.room.Insert

@@ -1,4 +1,4 @@
-package com.example.gptest
+package com.example.gptest.ui
 
 import android.os.Bundle
 import android.os.Handler
@@ -11,6 +11,17 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.gptest.R
+import com.example.gptest.business.QuoteCardMapper
+import com.example.gptest.business.QuoteParser
+import com.example.gptest.business.QuoteSnapshot
+import com.example.gptest.business.QuoteSortMode
+import com.example.gptest.business.QuoteSorter
+import com.example.gptest.business.TradingSession
+import com.example.gptest.data.AppDatabase
+import com.example.gptest.data.QuoteRepository
+import com.example.gptest.data.SortPreferences
+import com.example.gptest.data.WatchlistStore
 import com.example.gptest.databinding.ActivityMainBinding
 import java.util.Collections
 import java.util.concurrent.Executors

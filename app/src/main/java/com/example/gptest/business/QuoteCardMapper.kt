@@ -1,4 +1,4 @@
-package com.example.gptest
+package com.example.gptest.business
 
 data class OrderLevel(
     val price: String,

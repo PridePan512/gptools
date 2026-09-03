@@ -1,6 +1,7 @@
-package com.example.gptest
+package com.example.gptest.data
 
 import android.content.Context
+import com.example.gptest.business.QuoteSortMode
 
 class SortPreferences(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

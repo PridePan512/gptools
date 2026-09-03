@@ -1,4 +1,4 @@
-package com.example.gptest
+package com.example.gptest.data
 
 class WatchlistStore(private val dao: WatchlistDao) {
     fun load(): List<String> = dao.getAllCodes()

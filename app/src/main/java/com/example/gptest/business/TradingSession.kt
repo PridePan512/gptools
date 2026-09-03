@@ -1,4 +1,4 @@
-package com.example.gptest
+package com.example.gptest.business
 
 import java.time.Clock
 import java.time.DayOfWeek

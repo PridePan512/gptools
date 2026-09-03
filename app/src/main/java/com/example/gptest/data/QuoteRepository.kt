@@ -1,5 +1,7 @@
-package com.example.gptest
+package com.example.gptest.data
 
+import com.example.gptest.business.QuoteParser
+import com.example.gptest.business.QuoteSnapshot
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.Charset

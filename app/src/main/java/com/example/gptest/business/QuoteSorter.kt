@@ -1,4 +1,4 @@
-package com.example.gptest
+package com.example.gptest.business
 
 enum class QuoteSortMode {
     CUSTOM,

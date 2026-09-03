@@ -1,4 +1,4 @@
-package com.example.gptest
+package com.example.gptest.business
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -7,7 +7,6 @@ import org.junit.Test
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.ZoneOffset
 import java.time.ZonedDateTime
 
 class TradingSessionTest {

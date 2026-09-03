@@ -1,4 +1,4 @@
-package com.example.gptest
+package com.example.gptest.business
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
