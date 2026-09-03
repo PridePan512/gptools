@@ -6,9 +6,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.Charset
 
-class QuoteRepository {
+class QuoteRepository : QuoteDataSource {
 
-    fun fetchQuotes(codes: List<String>): Result<List<QuoteSnapshot>> {
+    override fun fetchQuotes(codes: List<String>): Result<List<QuoteSnapshot>> {
         if (codes.isEmpty()) {
             return Result.failure(IllegalStateException("invalid response"))
         }

@@ -44,6 +44,10 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
     implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.ktx)
+    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.room.runtime)
     ksp(libs.androidx.room.compiler)
     constraints {
@@ -51,6 +55,7 @@ dependencies {
         implementation("androidx.core:core-ktx:1.17.0")
     }
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
 }
