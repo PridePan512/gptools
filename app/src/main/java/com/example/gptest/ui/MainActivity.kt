@@ -1,5 +1,6 @@
 package com.example.gptest.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -22,6 +23,8 @@ import com.example.gptest.data.QuoteRepository
 import com.example.gptest.data.SortPreferences
 import com.example.gptest.data.WatchlistStore
 import com.example.gptest.databinding.ActivityMainBinding
+import com.example.gptest.ui.alert.AlertRulesActivity
+import com.example.gptest.ui.alert.AlertWatchlistExtras
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 import java.util.Collections
@@ -45,6 +48,14 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         setupQuoteList()
         binding.btnSort.setOnClickListener { showSortMenu() }
+        binding.btnAlerts.setOnClickListener {
+            startActivity(
+                AlertWatchlistExtras.put(
+                    Intent(this, AlertRulesActivity::class.java),
+                    AlertWatchlistExtras.fromQuotes(viewModel.uiState.value.rows)
+                )
+            )
+        }
         binding.btnAdd.setOnClickListener { addCode() }
         binding.btnAdd.isEnabled = false
         binding.etStockCode.isEnabled = false

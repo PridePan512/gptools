@@ -21,6 +21,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".ui.alert.AlertRulesActivity"
+            android:exported="false"
+            android:label="@string/alert_rules_title"
+            android:parentActivityName=".ui.MainActivity" />
+        <activity
+            android:name=".ui.alert.AlertRuleEditActivity"
+            android:exported="false"
+            android:label="@string/alert_rule_edit"
+            android:parentActivityName=".ui.alert.AlertRulesActivity"
+            android:windowSoftInputMode="adjustResize" />
     </application>
-
 </manifest>
