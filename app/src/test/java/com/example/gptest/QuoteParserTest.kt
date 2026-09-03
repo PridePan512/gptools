@@ -1,0 +1,155 @@
+package com.example.gptest
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class QuoteParserTest {
+
+    @Test
+    fun parseCurrentPrice_fromTencentSample() {
+        val raw =
+            """v_sz002491="51~通鼎互联~002491~21.15~21.46~21.51~785166~362386~422441~";"""
+        assertEquals("21.15", QuoteParser.parseCurrentPrice(raw))
+    }
+
+    @Test
+    fun parseCurrentPrice_empty_returnsNull() {
+        assertNull(QuoteParser.parseCurrentPrice(""))
+    }
+
+    @Test
+    fun parseCurrentPrice_tooFewFields_returnsNull() {
+        assertNull(QuoteParser.parseCurrentPrice("""v_sz002491="51~通鼎互联~002491";"""))
+    }
+
+    @Test
+    fun normalizeStockCode_prefixedLowercase() {
+        assertEquals("sz002491", QuoteParser.normalizeStockCode("sz002491"))
+    }
+
+    @Test
+    fun normalizeStockCode_prefixedUppercase() {
+        assertEquals("sz002491", QuoteParser.normalizeStockCode("SZ002491"))
+    }
+
+    @Test
+    fun normalizeStockCode_sixDigitSz() {
+        assertEquals("sz002491", QuoteParser.normalizeStockCode("002491"))
+    }
+
+    @Test
+    fun normalizeStockCode_sixDigitSh() {
+        assertEquals("sh600000", QuoteParser.normalizeStockCode("600000"))
+    }
+
+    @Test
+    fun normalizeStockCode_sixDigitBj() {
+        assertEquals("bj430047", QuoteParser.normalizeStockCode("430047"))
+    }
+
+    @Test
+    fun normalizeStockCode_blank_returnsNull() {
+        assertNull(QuoteParser.normalizeStockCode("  "))
+    }
+
+    @Test
+    fun resolveIntervalSeconds_blankOrInvalid_defaultsToFive() {
+        assertEquals(5L, QuoteParser.resolveIntervalSeconds(""))
+        assertEquals(5L, QuoteParser.resolveIntervalSeconds("abc"))
+        assertEquals(5L, QuoteParser.resolveIntervalSeconds("0"))
+    }
+
+    @Test
+    fun resolveIntervalSeconds_validValue() {
+        assertEquals(8L, QuoteParser.resolveIntervalSeconds("8"))
+    }
+
+    @Test
+    fun parseQuote_returnsAllFieldsAndPrice() {
+        val raw = """v_sz002491="51~通鼎互联~002491~21.15~21.46~21.51~785166";"""
+        val quote = QuoteParser.parseQuote(raw)!!
+        assertEquals("21.15", quote.price)
+        assertEquals("通鼎互联", quote.fields[1])
+        assertEquals("002491", quote.fields[2])
+        assertEquals(7, quote.fields.size)
+    }
+
+    @Test
+    fun parseQuote_empty_returnsNull() {
+        assertNull(QuoteParser.parseQuote(""))
+    }
+
+    @Test
+    fun formatQuoteDetail_includesLabeledFields() {
+        val quote = QuoteParser.parseQuote(
+            """v_sz002491="51~通鼎互联~002491~21.15~21.46";"""
+        )!!
+        val text = QuoteParser.formatQuoteDetail(quote.fields)
+        assertTrue(text.contains("名称"))
+        assertTrue(text.contains("通鼎互联"))
+        assertTrue(text.contains("当前价格"))
+        assertTrue(text.contains("21.15"))
+        assertTrue(text.contains("[ 3]"))
+    }
+
+    @Test
+    fun parseQuotes_parsesMultipleStocks() {
+        val raw = """
+            v_sz002491="51~通鼎互联~002491~21.15~21.46";
+            v_sh600000="1~浦发银行~600000~10.20~10.11";
+        """.trimIndent()
+        val quotes = QuoteParser.parseQuotes(raw)
+        assertEquals(2, quotes.size)
+        assertEquals("sz002491", quotes[0].requestCode)
+        assertEquals("通鼎互联", quotes[0].name)
+        assertEquals("21.15", quotes[0].price)
+        assertEquals("sh600000", quotes[1].requestCode)
+        assertEquals("浦发银行", quotes[1].name)
+        assertEquals("10.20", quotes[1].price)
+    }
+
+    @Test
+    fun parseQuotes_emptyOrInvalid_returnsEmptyList() {
+        assertTrue(QuoteParser.parseQuotes("").isEmpty())
+        assertTrue(QuoteParser.parseQuotes("no-quotes-here").isEmpty())
+    }
+
+    @Test
+    fun parseQuote_fillsNameAndRequestCode() {
+        val quote = QuoteParser.parseQuote(
+            """v_sz002491="51~通鼎互联~002491~21.15~21.46";"""
+        )!!
+        assertEquals("sz002491", quote.requestCode)
+        assertEquals("通鼎互联", quote.name)
+    }
+
+    @Test
+    fun parseQuote_readsChangePercent() {
+        val fields = MutableList(33) { "" }
+        fields[1] = "通鼎互联"
+        fields[2] = "002491"
+        fields[3] = "21.15"
+        fields[32] = "-1.44"
+        val quote = QuoteParser.parseQuote("""v_sz002491="${fields.joinToString("~")}";""")!!
+        assertEquals("-1.44", quote.changePercent)
+    }
+
+    @Test
+    fun parseQuote_missingChangePercent_isEmpty() {
+        val quote = QuoteParser.parseQuote(
+            """v_sz002491="51~通鼎互联~002491~21.15~21.46";"""
+        )!!
+        assertEquals("", quote.changePercent)
+    }
+
+    @Test
+    fun formatChangePercent_addsSignAndPercent() {
+        assertEquals("+1.44%", QuoteParser.formatChangePercent("1.44"))
+        assertEquals("-1.44%", QuoteParser.formatChangePercent("-1.44"))
+        assertEquals("0%", QuoteParser.formatChangePercent("0"))
+        assertEquals("--", QuoteParser.formatChangePercent(""))
+        assertEquals("+2.1%", QuoteParser.formatChangePercent("+2.1%"))
+    }
+}
