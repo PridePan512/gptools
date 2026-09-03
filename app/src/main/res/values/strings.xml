@@ -11,6 +11,8 @@
     <string name="sort_amount">成交额</string>
     <string name="sort_price">股价</string>
     <string name="delete">删除</string>
+    <string name="undo">撤销</string>
+    <string name="snackbar_deleted">已删除 %1$s</string>
     <string name="column_name">名称</string>
     <string name="column_code">代码</string>
     <string name="column_price">当前价</string>

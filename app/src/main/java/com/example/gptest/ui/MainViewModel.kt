@@ -41,8 +41,10 @@ class MainViewModel(
     private var isRunning = false
     private var watchlistLoaded = false
     private var status: QuoteStatus = QuoteStatus.Idle
-    private var intervalMs = DEFAULT_INTERVAL_MS
+    private var intervalSeconds = sortModeStore.intervalSeconds.let { if (it < 1L) 5L else it }
+    private var intervalMs = intervalSeconds * 1000L
     private var pollJob: Job? = null
+    private var pendingUndo: PendingUndo? = null
 
     private val _uiState = MutableStateFlow(buildState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -84,15 +86,43 @@ class MainViewModel(
     }
 
     fun removeCode(code: String) {
-        watchlist.remove(code)
+        val index = watchlist.indexOf(code)
+        if (index < 0) return
+        val quote = quotes.find { it.requestCode == code }
+        pendingUndo = PendingUndo(
+            index = index,
+            code = code,
+            quote = quote,
+            selected = selectedCode == code
+        )
+        watchlist.removeAt(index)
         persist { watchlistDataSource.remove(code) }
         quotes = quotes.filter { it.requestCode != code }
         if (selectedCode == code) selectedCode = null
+        _events.tryEmit(UiEvent.OfferUndoDelete(undoLabel(quote, code)))
         publish()
         if (watchlist.isEmpty()) {
             if (isRunning) stopPolling()
             return
         }
+        if (isRunning) refreshQuotesNow()
+    }
+
+    fun undoRemove() {
+        val deleted = pendingUndo ?: return
+        pendingUndo = null
+        if (watchlist.contains(deleted.code)) return
+        val index = deleted.index.coerceIn(0, watchlist.size)
+        watchlist.add(index, deleted.code)
+        if (deleted.quote != null) {
+            quotes = quotes + deleted.quote
+        }
+        if (deleted.selected) selectedCode = deleted.code
+        persist {
+            watchlistDataSource.add(deleted.code)
+            watchlistDataSource.reorder(watchlist.toList())
+        }
+        publish()
         if (isRunning) refreshQuotesNow()
     }
 
@@ -120,13 +150,20 @@ class MainViewModel(
         publish()
     }
 
+    fun saveInterval(intervalText: String) {
+        intervalSeconds = QuoteParser.resolveIntervalSeconds(intervalText)
+        intervalMs = intervalSeconds * 1000L
+        sortModeStore.intervalSeconds = intervalSeconds
+        publish()
+    }
+
     fun startPolling(intervalText: String) {
+        saveInterval(intervalText)
         if (watchlist.isEmpty()) {
             status = QuoteStatus.EmptyWatchlist
             publish()
             return
         }
-        intervalMs = QuoteParser.resolveIntervalSeconds(intervalText) * 1000L
         isRunning = true
         if (TradingSession.isOpen(clock)) {
             status = QuoteStatus.Running
@@ -232,6 +269,7 @@ class MainViewModel(
             rawExpanded = rawExpanded,
             isRunning = isRunning,
             watchlistLoaded = watchlistLoaded,
+            intervalSeconds = intervalSeconds,
             status = status
         )
     }
@@ -250,7 +288,18 @@ class MainViewModel(
         return QuoteSorter.sort(rows, sortMode, watchlist.toList())
     }
 
-    companion object {
-        private const val DEFAULT_INTERVAL_MS = 5_000L
+    private fun undoLabel(quote: QuoteSnapshot?, code: String): String {
+        val name = quote?.name?.trim().orEmpty()
+        if (name.isNotEmpty() && name != "--") return name
+        return QuoteListAdapter.displayCode(
+            quote ?: QuoteSnapshot(code, "", "", "", emptyList())
+        )
     }
+
+    private data class PendingUndo(
+        val index: Int,
+        val code: String,
+        val quote: QuoteSnapshot?,
+        val selected: Boolean
+    )
 }

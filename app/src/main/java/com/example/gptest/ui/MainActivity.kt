@@ -22,6 +22,7 @@ import com.example.gptest.data.QuoteRepository
 import com.example.gptest.data.SortPreferences
 import com.example.gptest.data.WatchlistStore
 import com.example.gptest.databinding.ActivityMainBinding
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 import java.util.Collections
 
@@ -58,9 +59,22 @@ class MainActivity : AppCompatActivity() {
         binding.btnStart.setOnClickListener {
             viewModel.startPolling(binding.etInterval.text?.toString().orEmpty())
         }
+        binding.etInterval.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                viewModel.saveInterval(binding.etInterval.text?.toString().orEmpty())
+                true
+            } else {
+                false
+            }
+        }
         binding.btnStop.setOnClickListener { viewModel.stopPolling() }
         binding.quoteCard.tvToggleRaw.setOnClickListener { viewModel.toggleRaw() }
         observeViewModel()
+    }
+
+    override fun onStop() {
+        viewModel.saveInterval(binding.etInterval.text?.toString().orEmpty())
+        super.onStop()
     }
 
     private fun observeViewModel() {
@@ -71,8 +85,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 launch {
                     viewModel.events.collect { event ->
-                        if (event is UiEvent.ClearCodeInput) {
-                            binding.etStockCode.text?.clear()
+                        when (event) {
+                            UiEvent.ClearCodeInput -> binding.etStockCode.text?.clear()
+                            is UiEvent.OfferUndoDelete -> showUndoSnackbar(event.label)
                         }
                     }
                 }
@@ -84,6 +99,10 @@ class MainActivity : AppCompatActivity() {
         binding.btnAdd.isEnabled = state.watchlistLoaded
         binding.etStockCode.isEnabled = state.watchlistLoaded
         binding.etInterval.isEnabled = !state.isRunning
+        val intervalText = state.intervalSeconds.toString()
+        if (!binding.etInterval.hasFocus() && binding.etInterval.text?.toString() != intervalText) {
+            binding.etInterval.setText(intervalText)
+        }
         binding.btnStart.isEnabled = !state.isRunning
         binding.btnStop.isEnabled = state.isRunning
         binding.root.keepScreenOn = state.isRunning
@@ -95,6 +114,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun addCode() {
         viewModel.addCode(binding.etStockCode.text?.toString().orEmpty())
+    }
+
+    private fun showUndoSnackbar(label: String) {
+        Snackbar.make(
+            binding.root,
+            getString(R.string.snackbar_deleted, label),
+            Snackbar.LENGTH_LONG
+        ).setAction(R.string.undo) {
+            viewModel.undoRemove()
+        }.show()
     }
 
     private fun setupQuoteList() {
@@ -151,7 +180,7 @@ class MainActivity : AppCompatActivity() {
         override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
             super.clearView(recyclerView, viewHolder)
             if (quoteAdapter.dragEnabled) {
-                viewModel.reorder(quoteAdapter.items.map { it.requestCode })
+                viewModel.reorder(quoteAdapter.items.map { it.quote.requestCode })
             }
         }
     })

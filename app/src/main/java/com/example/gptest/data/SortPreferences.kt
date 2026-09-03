@@ -15,8 +15,20 @@ class SortPreferences(context: Context) : SortModeStore {
             prefs.edit().putString(KEY_MODE, value.name).apply()
         }
 
+    override var intervalSeconds: Long
+        get() {
+            val stored = prefs.getLong(KEY_INTERVAL_SECONDS, DEFAULT_INTERVAL_SECONDS)
+            return if (stored < 1L) DEFAULT_INTERVAL_SECONDS else stored
+        }
+        set(value) {
+            val seconds = if (value < 1L) DEFAULT_INTERVAL_SECONDS else value
+            prefs.edit().putLong(KEY_INTERVAL_SECONDS, seconds).apply()
+        }
+
     companion object {
         private const val PREFS_NAME = "gptest_prefs"
         private const val KEY_MODE = "quote_sort_mode"
+        private const val KEY_INTERVAL_SECONDS = "quote_interval_seconds"
+        private const val DEFAULT_INTERVAL_SECONDS = 5L
     }
 }

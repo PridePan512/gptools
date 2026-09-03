@@ -145,6 +145,103 @@ class MainViewModelTest {
         assertFalse(vm.uiState.value.isRunning)
     }
 
+    @Test
+    fun savedInterval_isExposedInUiState() = runTest(dispatcher) {
+        val vm = viewModel(sortStore = FakeSortStore(intervalSeconds = 12))
+        advanceUntilIdle()
+        assertEquals(12L, vm.uiState.value.intervalSeconds)
+    }
+
+    @Test
+    fun startPolling_persistsResolvedInterval() = runTest(dispatcher) {
+        val store = FakeSortStore()
+        val vm = viewModel(
+            quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50")))),
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            sortStore = store,
+            clock = closedClock()
+        )
+        advanceUntilIdle()
+        vm.startPolling("8")
+        advanceUntilIdle()
+        assertEquals(8L, store.intervalSeconds)
+        assertEquals(8L, vm.uiState.value.intervalSeconds)
+    }
+
+    @Test
+    fun startPolling_invalidInterval_persistsDefaultFive() = runTest(dispatcher) {
+        val store = FakeSortStore()
+        val vm = viewModel(sortStore = store)
+        advanceUntilIdle()
+        vm.startPolling("0")
+        advanceUntilIdle()
+        assertEquals(5L, store.intervalSeconds)
+        assertEquals(5L, vm.uiState.value.intervalSeconds)
+    }
+
+    @Test
+    fun saveInterval_persistsWithoutStarting() = runTest(dispatcher) {
+        val store = FakeSortStore()
+        val vm = viewModel(sortStore = store)
+        advanceUntilIdle()
+        vm.saveInterval("15")
+        advanceUntilIdle()
+        assertEquals(15L, store.intervalSeconds)
+        assertEquals(15L, vm.uiState.value.intervalSeconds)
+        assertFalse(vm.uiState.value.isRunning)
+    }
+
+    @Test
+    fun removeCode_emitsUndoEvent_andDropsRow() = runTest(dispatcher) {
+        val vm = viewModel(
+            quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50")))),
+            watchlist = FakeWatchlist(mutableListOf("sz000001", "sz000002")),
+            clock = closedClock()
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        advanceUntilIdle()
+        val events = mutableListOf<UiEvent>()
+        val job = launch { vm.events.collect { events.add(it) } }
+        advanceUntilIdle()
+        vm.removeCode("sz000001")
+        advanceUntilIdle()
+        job.cancel()
+        assertEquals(listOf("sz000002"), vm.uiState.value.rows.map { it.requestCode })
+        assertTrue(events.any { it is UiEvent.OfferUndoDelete })
+    }
+
+    @Test
+    fun undoRemove_restoresCodeAtOriginalIndex() = runTest(dispatcher) {
+        val store = FakeWatchlist(mutableListOf("sz000001", "sz000002", "sz000003"))
+        val vm = viewModel(
+            quotes = FakeQuotes(
+                Result.success(
+                    listOf(
+                        snapshot("sz000001", "11.00", "1.50"),
+                        snapshot("sz000002", "12.00", "2.00"),
+                        snapshot("sz000003", "13.00", "3.00")
+                    )
+                )
+            ),
+            watchlist = store,
+            clock = closedClock()
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        advanceUntilIdle()
+        vm.removeCode("sz000002")
+        advanceUntilIdle()
+        vm.undoRemove()
+        advanceUntilIdle()
+        assertEquals(
+            listOf("sz000001", "sz000002", "sz000003"),
+            vm.uiState.value.rows.map { it.requestCode }
+        )
+        assertEquals(listOf("sz000001", "sz000002", "sz000003"), store.load())
+        assertEquals("12.00", vm.uiState.value.rows[1].price)
+    }
+
     private fun viewModel(
         quotes: QuoteDataSource = FakeQuotes(Result.success(emptyList())),
         watchlist: WatchlistDataSource = FakeWatchlist(),
@@ -187,7 +284,8 @@ class MainViewModelTest {
         }
     }
 
-    private class FakeSortStore : SortModeStore {
-        override var mode: QuoteSortMode = QuoteSortMode.CUSTOM
-    }
+    private class FakeSortStore(
+        override var mode: QuoteSortMode = QuoteSortMode.CUSTOM,
+        override var intervalSeconds: Long = 5L
+    ) : SortModeStore
 }

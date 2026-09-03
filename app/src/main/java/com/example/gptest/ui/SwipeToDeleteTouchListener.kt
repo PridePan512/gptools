@@ -10,7 +10,8 @@ class SwipeToDeleteTouchListener(
     private val content: View,
     private val onClick: () -> Unit,
     private val onDelete: () -> Unit,
-    private val onLongPress: (() -> Unit)? = null
+    private val onLongPress: (() -> Unit)? = null,
+    private val isLongPressEnabled: () -> Boolean = { onLongPress != null }
 ) : View.OnTouchListener {
 
     private val touchSlop = ViewConfiguration.get(content.context).scaledTouchSlop
@@ -40,7 +41,7 @@ class SwipeToDeleteTouchListener(
                 deleted = false
                 longPressed = false
                 view.parent?.requestDisallowInterceptTouchEvent(false)
-                if (onLongPress != null) {
+                if (onLongPress != null && isLongPressEnabled()) {
                     view.removeCallbacks(longPressRunnable)
                     view.postDelayed(longPressRunnable, longPressTimeout)
                 }
@@ -87,11 +88,7 @@ class SwipeToDeleteTouchListener(
                         !deleted
                     ) {
                         deleted = true
-                        content.animate()
-                            .translationX(-view.width.toFloat())
-                            .setDuration(120)
-                            .withEndAction(onDelete)
-                            .start()
+                        onDelete()
                     } else {
                         content.animate().translationX(0f).setDuration(120).start()
                     }
@@ -105,5 +102,15 @@ class SwipeToDeleteTouchListener(
             }
         }
         return false
+    }
+
+    fun reset(view: View) {
+        view.removeCallbacks(longPressRunnable)
+        swiping = false
+        decided = false
+        deleted = false
+        longPressed = false
+        content.animate().setListener(null).withEndAction(null).cancel()
+        content.translationX = 0f
     }
 }

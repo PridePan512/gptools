@@ -19,6 +19,7 @@ sealed interface QuoteStatus {
 
 sealed interface UiEvent {
     data object ClearCodeInput : UiEvent
+    data class OfferUndoDelete(val label: String) : UiEvent
 }
 
 data class MainUiState(
@@ -30,5 +31,6 @@ data class MainUiState(
     val rawExpanded: Boolean = false,
     val isRunning: Boolean = false,
     val watchlistLoaded: Boolean = false,
+    val intervalSeconds: Long = 5L,
     val status: QuoteStatus = QuoteStatus.Idle
 )
