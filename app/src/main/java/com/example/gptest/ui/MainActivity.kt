@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.gptest.R
 import com.example.gptest.business.QuoteParser
+import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.business.QuoteSortMode
 import com.example.gptest.business.TradingSession
 import com.example.gptest.databinding.ActivityMainBinding
@@ -135,6 +136,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnSort.setText(sortLabel(state.sortMode))
         binding.tvStatus.text = statusText(state.status)
         bindLastUpdated(state.lastUpdatedMs)
+        bindShanghaiIndex(state.shanghaiIndex)
         quoteAdapter.submit(state.rows, state.selectedCode, state.dragEnabled)
         bindSelectedCard(state)
     }
@@ -149,6 +151,19 @@ class MainActivity : AppCompatActivity() {
             R.string.quote_last_updated,
             lastUpdatedFormatter.format(Instant.ofEpochMilli(ms))
         )
+    }
+
+    private fun bindShanghaiIndex(quote: QuoteSnapshot?) {
+        val name = quote?.name?.trim()?.takeIf { it.isNotEmpty() && it != "--" }
+            ?: getString(R.string.shanghai_index_name)
+        val price = quote?.price?.trim()?.takeIf { it.isNotEmpty() }
+            ?: getString(R.string.shanghai_index_placeholder)
+        val change = QuoteParser.formatChangePercent(quote?.changePercent.orEmpty())
+        binding.tvIndexName.text = name
+        binding.tvIndexPrice.text = price
+        binding.tvIndexChange.text = change
+        applyChangeColor(binding.tvIndexPrice, quote?.changePercent.orEmpty())
+        applyChangeColor(binding.tvIndexChange, quote?.changePercent.orEmpty())
     }
 
     private fun addCode() {

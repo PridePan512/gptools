@@ -55,6 +55,35 @@ class QuoteParserTest {
     }
 
     @Test
+    fun normalizeStockCode_sixDigitSzEtf() {
+        assertEquals("sz159915", QuoteParser.normalizeStockCode("159915"))
+    }
+
+    @Test
+    fun normalizeStockCode_sixDigitShEtf() {
+        assertEquals("sh510300", QuoteParser.normalizeStockCode("510300"))
+        assertEquals("sh588000", QuoteParser.normalizeStockCode("588000"))
+    }
+
+    @Test
+    fun normalizeStockCode_sixDigitSzIndex() {
+        assertEquals("sz399001", QuoteParser.normalizeStockCode("399001"))
+        assertEquals("sz399006", QuoteParser.normalizeStockCode("399006"))
+    }
+
+    @Test
+    fun normalizeStockCode_shanghaiIndex_requiresPrefix() {
+        assertEquals("sz000001", QuoteParser.normalizeStockCode("000001"))
+        assertEquals("sh000001", QuoteParser.normalizeStockCode("sh000001"))
+        assertEquals("sh000300", QuoteParser.normalizeStockCode("SH000300"))
+    }
+
+    @Test
+    fun normalizeStockCode_unknownSixDigitPrefix_returnsNull() {
+        assertNull(QuoteParser.normalizeStockCode("200001"))
+    }
+
+    @Test
     fun resolveIntervalSeconds_blankOrInvalid_defaultsToFive() {
         assertEquals(5L, QuoteParser.resolveIntervalSeconds(""))
         assertEquals(5L, QuoteParser.resolveIntervalSeconds("abc"))

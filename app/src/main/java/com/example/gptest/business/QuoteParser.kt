@@ -105,8 +105,8 @@ object QuoteParser {
         if (prefixedCode.matches(trimmed)) return trimmed
         if (!sixDigitCode.matches(trimmed)) return null
         val prefix = when (trimmed.first()) {
-            '6', '9' -> "sh"
-            '0', '3' -> "sz"
+            '6', '9', '5' -> "sh"
+            '0', '1', '3' -> "sz"
             '4', '8' -> "bj"
             else -> return null
         }
@@ -132,4 +132,5 @@ object QuoteParser {
 
     private val QUOTE_BLOCK = Regex("""v_([a-zA-Z]{2}\d+)="([^"]*)"""")
     private const val CHANGE_PERCENT_INDEX = 32
+    const val SHANGHAI_INDEX_CODE = "sh000001"
 }

@@ -53,6 +53,7 @@ class QuoteMonitor(
     private var pollJob: Job? = null
     private var pendingUndo: PendingUndo? = null
     private var lastUpdatedMs: Long? = null
+    private var shanghaiIndex: QuoteSnapshot? = null
 
     private val _uiState = MutableStateFlow(buildState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -204,7 +205,7 @@ class QuoteMonitor(
 
     private suspend fun fetchOnceThenSchedule() {
         if (!isRunning) return
-        val codes = watchlist.toList()
+        val codes = fetchCodes()
         if (codes.isEmpty()) {
             stopPolling()
             return
@@ -215,10 +216,14 @@ class QuoteMonitor(
         result.fold(
             onSuccess = { latest ->
                 val previous = quotes
-                quotes = latest
+                shanghaiIndex = latest.find { it.requestCode == QuoteParser.SHANGHAI_INDEX_CODE } ?: shanghaiIndex
+                quotes = latest.filter {
+                    it.requestCode != QuoteParser.SHANGHAI_INDEX_CODE ||
+                        watchlist.contains(QuoteParser.SHANGHAI_INDEX_CODE)
+                }
                 lastUpdatedMs = clock.millis()
                 publish()
-                evaluateAlerts(previous, latest)
+                evaluateAlerts(previous, quotes)
             },
             onFailure = { error ->
                 status = if (error is IllegalStateException) {
@@ -274,6 +279,16 @@ class QuoteMonitor(
         }
     }
 
+    private fun fetchCodes(): List<String> {
+        val codes = watchlist.toList()
+        if (codes.isEmpty()) return emptyList()
+        return if (codes.contains(QuoteParser.SHANGHAI_INDEX_CODE)) {
+            codes
+        } else {
+            codes + QuoteParser.SHANGHAI_INDEX_CODE
+        }
+    }
+
     private fun persist(action: () -> Unit) {
         scope.launch { withContext(ioDispatcher) { action() } }
     }
@@ -303,6 +318,7 @@ class QuoteMonitor(
             watchlistLoaded = watchlistLoaded,
             intervalSeconds = intervalSeconds,
             lastUpdatedMs = lastUpdatedMs,
+            shanghaiIndex = shanghaiIndex,
             status = status
         )
     }

@@ -165,6 +165,48 @@ class MainViewModelTest {
     }
 
     @Test
+    fun fetchSuccess_exposesShanghaiIndex_withoutAddingToRows() = runTest(dispatcher) {
+        val quotes = FakeQuotes(
+            Result.success(
+                listOf(
+                    snapshot("sz000001", "11.00", "1.50"),
+                    snapshot("sh000001", "3245.12", "0.85", name = "上证指数")
+                )
+            )
+        )
+        val vm = viewModel(
+            quotes = quotes,
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            clock = closedClock()
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        advanceUntilIdle()
+        assertEquals(listOf("sz000001", "sh000001"), quotes.lastRequested)
+        assertEquals(listOf("sz000001"), vm.uiState.value.rows.map { it.requestCode })
+        val index = vm.uiState.value.shanghaiIndex
+        assertEquals("sh000001", index?.requestCode)
+        assertEquals("3245.12", index?.price)
+        assertEquals("0.85", index?.changePercent)
+    }
+
+    @Test
+    fun fetchSuccess_keepsShanghaiIndexInRows_whenWatchlisted() = runTest(dispatcher) {
+        val vm = viewModel(
+            quotes = FakeQuotes(
+                Result.success(listOf(snapshot("sh000001", "3245.12", "0.85", name = "上证指数")))
+            ),
+            watchlist = FakeWatchlist(mutableListOf("sh000001")),
+            clock = closedClock()
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        advanceUntilIdle()
+        assertEquals(listOf("sh000001"), vm.uiState.value.rows.map { it.requestCode })
+        assertEquals("3245.12", vm.uiState.value.shanghaiIndex?.price)
+    }
+
+    @Test
     fun fetchIllegalState_setsInvalidResponse() = runTest(dispatcher) {
         val vm = viewModel(
             quotes = FakeQuotes(Result.failure(IllegalStateException("invalid response"))),
@@ -390,16 +432,27 @@ class MainViewModelTest {
         return Clock.fixed(instant, TradingSession.SHANGHAI)
     }
 
-    private fun snapshot(code: String, price: String, change: String): QuoteSnapshot {
+    private fun snapshot(
+        code: String,
+        price: String,
+        change: String,
+        name: String = "测试"
+    ): QuoteSnapshot {
         val fields = MutableList(40) { "" }
         fields[2] = code.takeLast(6)
         fields[3] = price
         fields[32] = change
-        return QuoteSnapshot(code, "测试", price, change, fields)
+        return QuoteSnapshot(code, name, price, change, fields)
     }
 
     private class FakeQuotes(private val result: Result<List<QuoteSnapshot>>) : QuoteDataSource {
-        override fun fetchQuotes(codes: List<String>) = result
+        var lastRequested: List<String> = emptyList()
+            private set
+
+        override fun fetchQuotes(codes: List<String>): Result<List<QuoteSnapshot>> {
+            lastRequested = codes
+            return result
+        }
     }
 
     private class FakeWatchlist(

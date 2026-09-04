@@ -1,12 +1,13 @@
 <resources>
     <string name="app_name">GPTest</string>
-    <string name="stock_code_hint">股票代码</string>
+    <string name="stock_code_hint">代码（个股/ETF）</string>
     <string name="add">添加</string>
     <string name="interval_hint">检测间隔（秒）</string>
     <string name="interval_default">5</string>
     <string name="quote_list_label">行情列表</string>
     <string name="quote_last_updated">最近更新 %1$s</string>
-    <string name="swipe_to_delete_hint">左滑删除；自定义排序时长按拖动调整顺序</string>
+    <string name="shanghai_index_name">上证指数</string>
+    <string name="shanghai_index_placeholder">--</string>
     <string name="sort_custom">自定义</string>
     <string name="sort_change">涨跌幅</string>
     <string name="sort_amount">成交额</string>
@@ -30,7 +31,7 @@
     <string name="status_preopen_once">未开盘，已更新一次，未启动定时刷新</string>
     <string name="status_lunch_once">午休中，已更新一次，未启动定时刷新</string>
     <string name="status_closed_once">已收盘，已更新一次，未启动定时刷新</string>
-    <string name="status_invalid_code">股票代码无效</string>
+    <string name="status_invalid_code">代码无效</string>
     <string name="status_duplicate_code">已在列表中</string>
     <string name="status_empty_code">请输入股票代码</string>
     <string name="status_added">已添加 %1$s</string>
