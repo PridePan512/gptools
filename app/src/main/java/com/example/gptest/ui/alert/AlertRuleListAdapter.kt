@@ -64,10 +64,11 @@ class AlertRuleListAdapter(
             binding.tvRuleStatus.setText(statusText)
             binding.tvRuleStatus.setBackgroundResource(statusBg)
             binding.tvRuleStatus.setTextColor(ContextCompat.getColor(context, statusColor))
-            binding.tvLastTriggered.text = if (rule.lastTriggered.isNullOrBlank()) {
+            val triggered = AlertEvaluator.formatTriggered(rule.lastTriggeredMs)
+            binding.tvLastTriggered.text = if (triggered.isNullOrBlank()) {
                 context.getString(R.string.alert_never_triggered)
             } else {
-                context.getString(R.string.alert_last_triggered, rule.lastTriggered)
+                context.getString(R.string.alert_last_triggered, triggered)
             }
             binding.root.setOnClickListener { onClick(rule) }
         }

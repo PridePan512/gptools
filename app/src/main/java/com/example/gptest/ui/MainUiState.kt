@@ -18,7 +18,10 @@ sealed interface QuoteStatus {
 }
 
 sealed interface UiEvent {
-    data object ClearCodeInput : UiEvent
+    data class AddSucceeded(val label: String) : UiEvent
+    data object AddEmptyCode : UiEvent
+    data object AddInvalidCode : UiEvent
+    data object AddDuplicateCode : UiEvent
     data class OfferUndoDelete(val label: String) : UiEvent
 }
 

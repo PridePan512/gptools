@@ -8,6 +8,8 @@ import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -18,13 +20,16 @@ import com.example.gptest.R
 import com.example.gptest.business.QuoteParser
 import com.example.gptest.business.QuoteSortMode
 import com.example.gptest.business.TradingSession
+import com.example.gptest.data.AlertStore
 import com.example.gptest.data.AppDatabase
 import com.example.gptest.data.QuoteRepository
 import com.example.gptest.data.SortPreferences
 import com.example.gptest.data.WatchlistStore
 import com.example.gptest.databinding.ActivityMainBinding
+import com.example.gptest.ui.alert.AlertNotificationPermission
 import com.example.gptest.ui.alert.AlertRulesActivity
 import com.example.gptest.ui.alert.AlertWatchlistExtras
+import com.example.gptest.ui.alert.AndroidAlertNotifier
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 import java.util.Collections
@@ -35,17 +40,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var quoteAdapter: QuoteListAdapter
 
     private val viewModel: MainViewModel by viewModels {
+        val database = AppDatabase.get(this)
         MainViewModelFactory(
             QuoteRepository(),
-            WatchlistStore(AppDatabase.get(this).watchlistDao()),
-            SortPreferences(this)
+            WatchlistStore(database.watchlistDao()),
+            SortPreferences(this),
+            AlertStore(database.alertDao()),
+            AndroidAlertNotifier(this)
         )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        prepareEdgeToEdge()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        setSupportActionBar(binding.toolbar)
+        applyEdgeToEdgeInsets(binding.root, binding.toolbar, binding.content)
         setupQuoteList()
         binding.btnSort.setOnClickListener { showSortMenu() }
         binding.btnAlerts.setOnClickListener {
@@ -59,20 +70,23 @@ class MainActivity : AppCompatActivity() {
         binding.btnAdd.setOnClickListener { addCode() }
         binding.btnAdd.isEnabled = false
         binding.etStockCode.isEnabled = false
-        binding.etStockCode.setOnEditorActionListener { _, actionId, _ ->
+        binding.etStockCode.setOnEditorActionListener { view, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 addCode()
+                dismissKeyboard(view)
                 true
             } else {
                 false
             }
         }
         binding.btnStart.setOnClickListener {
+            AlertNotificationPermission.requestIfNeeded(this)
             viewModel.startPolling(binding.etInterval.text?.toString().orEmpty())
         }
-        binding.etInterval.setOnEditorActionListener { _, actionId, _ ->
+        binding.etInterval.setOnEditorActionListener { view, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 viewModel.saveInterval(binding.etInterval.text?.toString().orEmpty())
+                dismissKeyboard(view)
                 true
             } else {
                 false
@@ -97,7 +111,13 @@ class MainActivity : AppCompatActivity() {
                 launch {
                     viewModel.events.collect { event ->
                         when (event) {
-                            UiEvent.ClearCodeInput -> binding.etStockCode.text?.clear()
+                            is UiEvent.AddSucceeded -> {
+                                binding.etStockCode.text?.clear()
+                                showMessage(getString(R.string.status_added, event.label))
+                            }
+                            UiEvent.AddEmptyCode -> showMessage(getString(R.string.status_empty_code))
+                            UiEvent.AddInvalidCode -> showMessage(getString(R.string.status_invalid_code))
+                            UiEvent.AddDuplicateCode -> showMessage(getString(R.string.status_duplicate_code))
                             is UiEvent.OfferUndoDelete -> showUndoSnackbar(event.label)
                         }
                     }
@@ -125,6 +145,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun addCode() {
         viewModel.addCode(binding.etStockCode.text?.toString().orEmpty())
+    }
+
+    private fun dismissKeyboard(view: View) {
+        view.clearFocus()
+        WindowCompat.getInsetsController(window, view).hide(WindowInsetsCompat.Type.ime())
+    }
+
+    private fun showMessage(text: String) {
+        Snackbar.make(binding.root, text, Snackbar.LENGTH_SHORT).show()
     }
 
     private fun showUndoSnackbar(label: String) {

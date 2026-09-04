@@ -1,6 +1,7 @@
 package com.example.gptest.ui.alert
 
 import com.example.gptest.business.QuoteSnapshot
+import java.util.UUID
 
 enum class AlertMetric(val label: String, val suffix: String) {
     PRICE("现价", ""),
@@ -84,7 +85,8 @@ data class AlertRule(
     val notifyMode: AlertNotifyMode,
     val conditions: List<AlertCondition>,
     val status: AlertRuleStatus,
-    val lastTriggered: String?
+    val lastTriggeredMs: Long? = null,
+    val onceConsumed: Boolean = false
 ) {
     fun displayName(): String = name.ifBlank { "未命名规则" }
 
@@ -94,10 +96,6 @@ data class AlertRule(
     }
 }
 
-object AlertPreviewStocks {
-    val options = listOf(
-        AlertStockOption("sz002491", "通鼎互联"),
-        AlertStockOption("sh600000", "浦发银行"),
-        AlertStockOption("sh600519", "贵州茅台")
-    )
+object AlertIds {
+    fun newId(): String = UUID.randomUUID().toString()
 }

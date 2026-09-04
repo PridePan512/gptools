@@ -91,7 +91,7 @@ class AddConditionSheet(
         }
         onConfirm(
             AlertCondition(
-                id = existing?.id ?: AlertPreviewStore.newId(),
+                id = existing?.id ?: AlertIds.newId(),
                 stock = stock,
                 metric = metric,
                 operator = operator,

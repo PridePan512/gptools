@@ -8,9 +8,14 @@ import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.business.QuoteSortMode
 import com.example.gptest.business.QuoteSorter
 import com.example.gptest.business.TradingSession
+import com.example.gptest.data.AlertDataSource
+import com.example.gptest.data.NoOpAlertDataSource
 import com.example.gptest.data.QuoteDataSource
 import com.example.gptest.data.SortModeStore
 import com.example.gptest.data.WatchlistDataSource
+import com.example.gptest.ui.alert.AlertEvaluator
+import com.example.gptest.ui.alert.AlertNotifier
+import com.example.gptest.ui.alert.NoOpAlertNotifier
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,7 +35,9 @@ class MainViewModel(
     private val watchlistDataSource: WatchlistDataSource,
     private val sortModeStore: SortModeStore,
     private val clock: Clock = Clock.system(TradingSession.SHANGHAI),
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val alertDataSource: AlertDataSource = NoOpAlertDataSource,
+    private val alertNotifier: AlertNotifier = NoOpAlertNotifier
 ) : ViewModel() {
 
     private val watchlist = mutableListOf<String>()
@@ -63,24 +70,30 @@ class MainViewModel(
     }
 
     fun addCode(raw: String) {
+        if (raw.trim().isEmpty()) {
+            _events.tryEmit(UiEvent.AddEmptyCode)
+            return
+        }
         val code = QuoteParser.normalizeStockCode(raw) ?: run {
             status = QuoteStatus.InvalidCode
+            _events.tryEmit(UiEvent.AddInvalidCode)
             publish()
             return
         }
         if (watchlist.contains(code)) {
             status = QuoteStatus.DuplicateCode
+            _events.tryEmit(UiEvent.AddDuplicateCode)
             publish()
             return
         }
         watchlist.add(code)
         persist { watchlistDataSource.add(code) }
-        _events.tryEmit(UiEvent.ClearCodeInput)
+        val label = code.removePrefix("sz").removePrefix("sh").removePrefix("bj")
+        _events.tryEmit(UiEvent.AddSucceeded(label))
         if (isRunning) {
             publish()
             refreshQuotesNow()
         } else {
-            status = QuoteStatus.Idle
             publish()
         }
     }
@@ -202,8 +215,10 @@ class MainViewModel(
         val keepErrorStatus = result.isFailure
         result.fold(
             onSuccess = { latest ->
+                val previous = quotes
                 quotes = latest
                 publish()
+                evaluateAlerts(previous, latest)
             },
             onFailure = { error ->
                 status = if (error is IllegalStateException) {
@@ -240,6 +255,22 @@ class MainViewModel(
             }
         }
         publish()
+    }
+
+    private suspend fun evaluateAlerts(
+        previous: List<QuoteSnapshot>,
+        current: List<QuoteSnapshot>
+    ) {
+        val fires = withContext(ioDispatcher) {
+            val rules = alertDataSource.loadRules()
+            if (rules.isEmpty()) return@withContext emptyList()
+            val result = AlertEvaluator.evaluate(rules, current, previous, clock.millis())
+            alertDataSource.replaceRules(result.updatedRules)
+            result.fires
+        }
+        if (fires.isNotEmpty()) {
+            alertNotifier.notifyFired(fires)
+        }
     }
 
     private fun persist(action: () -> Unit) {

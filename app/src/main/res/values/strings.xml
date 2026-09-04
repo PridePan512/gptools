@@ -27,6 +27,8 @@
     <string name="status_closed_once">已收盘，已更新一次，未启动定时刷新</string>
     <string name="status_invalid_code">股票代码无效</string>
     <string name="status_duplicate_code">已在列表中</string>
+    <string name="status_empty_code">请输入股票代码</string>
+    <string name="status_added">已添加 %1$s</string>
     <string name="status_empty_watchlist">请先添加至少一只股票</string>
     <string name="status_error">网络错误：%1$s</string>
     <string name="status_invalid_response">无法解析行情</string>
@@ -48,7 +50,8 @@
     <string name="level_ask">卖%1$d  %2$s  %3$s</string>
     <string name="alert_rules_entry">监控规则</string>
     <string name="alert_rules_title">监控规则</string>
-    <string name="alert_rules_preview_hint">当前为界面预览，条件链可以编辑，尚未接入行情提醒</string>
+    <string name="alert_channel_name">监控提醒</string>
+    <string name="alert_channel_desc">自选股条件触发时通知</string>
     <string name="alert_rules_empty_title">还没有监控规则</string>
     <string name="alert_rules_empty_subtitle">添加一条规则，例如股价涨到某价、或两只股票同时满足条件时通知你</string>
     <string name="alert_rule_new">新建规则</string>
@@ -83,7 +86,7 @@
     <string name="alert_condition_edit">修改条件</string>
     <string name="alert_condition_need_stock">请选择股票</string>
     <string name="alert_condition_need_value">请填写阈值</string>
-    <string name="alert_saved">已保存（仅界面预览）</string>
+    <string name="alert_saved">已保存</string>
     <string name="alert_deleted">已删除规则</string>
     <string name="alert_enable">启用规则</string>
     <string name="alert_need_watchlist">请先在自选列表添加股票</string>

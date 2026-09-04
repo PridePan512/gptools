@@ -7,9 +7,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.gptest.R
+import com.example.gptest.data.AlertStore
 import com.example.gptest.data.AppDatabase
 import com.example.gptest.data.WatchlistStore
 import com.example.gptest.databinding.ActivityAlertRuleEditBinding
+import com.example.gptest.ui.applyEdgeToEdgeInsets
+import com.example.gptest.ui.prepareEdgeToEdge
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -19,43 +22,24 @@ class AlertRuleEditActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAlertRuleEditBinding
     private lateinit var conditionAdapter: AlertConditionAdapter
+    private val store by lazy { AlertStore(AppDatabase.get(this).alertDao()) }
     private var ruleId: String = ""
     private var isNewRule = true
     private var enabled = true
-    private var status = AlertRuleStatus.WAITING
-    private var lastTriggered: String? = null
+    private var lastTriggeredMs: Long? = null
+    private var readyToSave = false
     private val conditions = mutableListOf<AlertCondition>()
     private val watchlistStocks = ArrayList<AlertStockOption>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        prepareEdgeToEdge()
         super.onCreate(savedInstanceState)
         binding = ActivityAlertRuleEditBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        applyEdgeToEdgeInsets(binding.root, binding.toolbar, binding.content)
         watchlistStocks.addAll(AlertWatchlistExtras.get(intent))
-
-        val incomingId = intent.getStringExtra(EXTRA_RULE_ID)
-        val existing = incomingId?.let { AlertPreviewStore.get(it) }
-        if (existing != null) {
-            isNewRule = false
-            ruleId = existing.id
-            enabled = existing.enabled
-            status = existing.status
-            lastTriggered = existing.lastTriggered
-            conditions.addAll(existing.conditions)
-            binding.etRuleName.setText(existing.name)
-            binding.toggleMatch.check(
-                if (existing.matchMode == AlertMatchMode.ALL) R.id.btnMatchAll else R.id.btnMatchAny
-            )
-            binding.rgNotify.check(notifyRadioId(existing.notifyMode))
-            binding.btnDelete.visibility = View.VISIBLE
-            title = getString(R.string.alert_rule_edit)
-        } else {
-            ruleId = AlertPreviewStore.newId()
-            binding.toggleMatch.check(R.id.btnMatchAll)
-            binding.rgNotify.check(R.id.rbNotifyCooldown)
-            title = getString(R.string.alert_rule_create)
-        }
 
         conditionAdapter = AlertConditionAdapter(
             joiner = { currentMatchMode().joiner },
@@ -72,6 +56,13 @@ class AlertRuleEditActivity : AppCompatActivity() {
         binding.btnAddCondition.setOnClickListener { showConditionSheet(null) }
         binding.btnSave.setOnClickListener { save() }
         binding.btnDelete.setOnClickListener { confirmDelete() }
+
+        val incomingId = intent.getStringExtra(EXTRA_RULE_ID)
+        if (incomingId.isNullOrBlank()) {
+            bindNewRule()
+        } else {
+            loadRule(incomingId)
+        }
         renderConditions()
         refreshWatchlistFromDb()
     }
@@ -79,6 +70,40 @@ class AlertRuleEditActivity : AppCompatActivity() {
     override fun onSupportNavigateUp(): Boolean {
         finish()
         return true
+    }
+
+    private fun bindNewRule() {
+        isNewRule = true
+        ruleId = AlertIds.newId()
+        readyToSave = true
+        binding.toggleMatch.check(R.id.btnMatchAll)
+        binding.rgNotify.check(R.id.rbNotifyCooldown)
+        title = getString(R.string.alert_rule_create)
+    }
+
+    private fun loadRule(id: String) {
+        lifecycleScope.launch {
+            val existing = withContext(Dispatchers.IO) { store.get(id) }
+            if (existing == null) {
+                bindNewRule()
+            } else {
+                isNewRule = false
+                ruleId = existing.id
+                enabled = existing.enabled
+                lastTriggeredMs = existing.lastTriggeredMs
+                conditions.clear()
+                conditions.addAll(existing.conditions)
+                binding.etRuleName.setText(existing.name)
+                binding.toggleMatch.check(
+                    if (existing.matchMode == AlertMatchMode.ALL) R.id.btnMatchAll else R.id.btnMatchAny
+                )
+                binding.rgNotify.check(notifyRadioId(existing.notifyMode))
+                binding.btnDelete.visibility = View.VISIBLE
+                title = getString(R.string.alert_rule_edit)
+                renderConditions()
+                readyToSave = true
+            }
+        }
     }
 
     private fun showConditionSheet(existing: AlertCondition?) {
@@ -121,23 +146,26 @@ class AlertRuleEditActivity : AppCompatActivity() {
     }
 
     private fun save() {
+        if (!readyToSave) return
         val name = binding.etRuleName.text?.toString().orEmpty().trim().ifBlank {
             conditions.firstOrNull()?.sentence().orEmpty().ifBlank { getString(R.string.alert_rule_create) }
         }
-        AlertPreviewStore.upsert(
-            AlertRule(
-                id = ruleId,
-                name = name,
-                enabled = enabled,
-                matchMode = currentMatchMode(),
-                notifyMode = currentNotifyMode(),
-                conditions = conditions.toList(),
-                status = if (isNewRule) AlertRuleStatus.WAITING else status,
-                lastTriggered = lastTriggered
-            )
+        val rule = AlertRule(
+            id = ruleId,
+            name = name,
+            enabled = enabled,
+            matchMode = currentMatchMode(),
+            notifyMode = currentNotifyMode(),
+            conditions = conditions.toList(),
+            status = if (enabled) AlertRuleStatus.WAITING else AlertRuleStatus.OFF,
+            lastTriggeredMs = lastTriggeredMs,
+            onceConsumed = false
         )
-        Toast.makeText(this, R.string.alert_saved, Toast.LENGTH_SHORT).show()
-        finish()
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) { store.saveRule(rule) }
+            Toast.makeText(this@AlertRuleEditActivity, R.string.alert_saved, Toast.LENGTH_SHORT).show()
+            finish()
+        }
     }
 
     private fun confirmDelete() {
@@ -145,9 +173,11 @@ class AlertRuleEditActivity : AppCompatActivity() {
             .setTitle(R.string.alert_delete_rule)
             .setMessage(binding.etRuleName.text?.toString().orEmpty().ifBlank { getString(R.string.alert_rule_edit) })
             .setPositiveButton(R.string.delete) { _, _ ->
-                AlertPreviewStore.delete(ruleId)
-                Toast.makeText(this, R.string.alert_deleted, Toast.LENGTH_SHORT).show()
-                finish()
+                lifecycleScope.launch {
+                    withContext(Dispatchers.IO) { store.deleteRule(ruleId) }
+                    Toast.makeText(this@AlertRuleEditActivity, R.string.alert_deleted, Toast.LENGTH_SHORT).show()
+                    finish()
+                }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()

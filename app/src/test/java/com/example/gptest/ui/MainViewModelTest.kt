@@ -3,9 +3,22 @@ package com.example.gptest.ui
 import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.business.QuoteSortMode
 import com.example.gptest.business.TradingSession
+import com.example.gptest.data.AlertDataSource
+import com.example.gptest.data.NoOpAlertDataSource
 import com.example.gptest.data.QuoteDataSource
 import com.example.gptest.data.SortModeStore
 import com.example.gptest.data.WatchlistDataSource
+import com.example.gptest.ui.alert.AlertCondition
+import com.example.gptest.ui.alert.AlertFire
+import com.example.gptest.ui.alert.AlertMatchMode
+import com.example.gptest.ui.alert.AlertMetric
+import com.example.gptest.ui.alert.AlertNotifier
+import com.example.gptest.ui.alert.AlertNotifyMode
+import com.example.gptest.ui.alert.AlertOperator
+import com.example.gptest.ui.alert.AlertRule
+import com.example.gptest.ui.alert.AlertRuleStatus
+import com.example.gptest.ui.alert.AlertStockOption
+import com.example.gptest.ui.alert.NoOpAlertNotifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -44,10 +57,29 @@ class MainViewModelTest {
     fun invalidCode_setsStatus_doesNotAddRow() = runTest(dispatcher) {
         val vm = viewModel()
         advanceUntilIdle()
+        val events = mutableListOf<UiEvent>()
+        val job = launch { vm.events.collect { events.add(it) } }
+        advanceUntilIdle()
         vm.addCode("abc")
         advanceUntilIdle()
+        job.cancel()
         assertEquals(QuoteStatus.InvalidCode, vm.uiState.value.status)
         assertTrue(vm.uiState.value.rows.isEmpty())
+        assertEquals(listOf(UiEvent.AddInvalidCode), events)
+    }
+
+    @Test
+    fun emptyCode_emitsEmptyEvent_doesNotAddRow() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        val events = mutableListOf<UiEvent>()
+        val job = launch { vm.events.collect { events.add(it) } }
+        advanceUntilIdle()
+        vm.addCode("  ")
+        advanceUntilIdle()
+        job.cancel()
+        assertTrue(vm.uiState.value.rows.isEmpty())
+        assertEquals(listOf(UiEvent.AddEmptyCode), events)
     }
 
     @Test
@@ -76,7 +108,7 @@ class MainViewModelTest {
         assertEquals("sz000001", row.requestCode)
         assertEquals("--", row.name)
         assertEquals("--", row.price)
-        assertEquals(listOf(UiEvent.ClearCodeInput), events)
+        assertEquals(listOf(UiEvent.AddSucceeded("000001")), events)
         assertEquals(QuoteStatus.Idle, vm.uiState.value.status)
     }
 
@@ -212,6 +244,44 @@ class MainViewModelTest {
     }
 
     @Test
+    fun fetchSuccess_evaluatesAlerts_andNotifies() = runTest(dispatcher) {
+        val rule = AlertRule(
+            id = "r1",
+            name = "破21",
+            enabled = true,
+            matchMode = AlertMatchMode.ALL,
+            notifyMode = AlertNotifyMode.ALWAYS,
+            conditions = listOf(
+                AlertCondition(
+                    id = "c1",
+                    stock = AlertStockOption("sz000001", "测试"),
+                    metric = AlertMetric.PRICE,
+                    operator = AlertOperator.GTE,
+                    numberValue = "21"
+                )
+            ),
+            status = AlertRuleStatus.WAITING
+        )
+        val alerts = FakeAlerts(mutableListOf(rule))
+        val notifier = RecordingNotifier()
+        val vm = viewModel(
+            quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "21.50", "1.50")))),
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            clock = closedClock(),
+            alerts = alerts,
+            notifier = notifier
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        advanceUntilIdle()
+        assertEquals(1, notifier.fires.size)
+        assertEquals("破21", notifier.fires.single().rule.name)
+        val saved = alerts.loadRules().single()
+        assertEquals(AlertRuleStatus.FIRED, saved.status)
+        assertTrue(saved.lastTriggeredMs != null)
+    }
+
+    @Test
     fun undoRemove_restoresCodeAtOriginalIndex() = runTest(dispatcher) {
         val store = FakeWatchlist(mutableListOf("sz000001", "sz000002", "sz000003"))
         val vm = viewModel(
@@ -246,9 +316,19 @@ class MainViewModelTest {
         quotes: QuoteDataSource = FakeQuotes(Result.success(emptyList())),
         watchlist: WatchlistDataSource = FakeWatchlist(),
         sortStore: SortModeStore = FakeSortStore(),
-        clock: Clock = closedClock()
+        clock: Clock = closedClock(),
+        alerts: AlertDataSource = NoOpAlertDataSource,
+        notifier: AlertNotifier = NoOpAlertNotifier
     ): MainViewModel {
-        return MainViewModel(quotes, watchlist, sortStore, clock, dispatcher)
+        return MainViewModel(
+            quotes,
+            watchlist,
+            sortStore,
+            clock,
+            dispatcher,
+            alerts,
+            notifier
+        )
     }
 
     private fun closedClock(): Clock {
@@ -288,4 +368,38 @@ class MainViewModelTest {
         override var mode: QuoteSortMode = QuoteSortMode.CUSTOM,
         override var intervalSeconds: Long = 5L
     ) : SortModeStore
+
+    private class FakeAlerts(
+        private val rules: MutableList<AlertRule>
+    ) : AlertDataSource {
+        override fun loadRules(): List<AlertRule> = rules.toList()
+        override fun get(id: String): AlertRule? = rules.find { it.id == id }
+        override fun saveRule(rule: AlertRule) {
+            val index = rules.indexOfFirst { it.id == rule.id }
+            if (index >= 0) rules[index] = rule else rules.add(rule)
+        }
+        override fun deleteRule(id: String) {
+            rules.removeAll { it.id == id }
+        }
+        override fun replaceRules(rules: List<AlertRule>) {
+            rules.forEach { saveRule(it) }
+        }
+        override fun setEnabled(id: String, enabled: Boolean) {
+            val rule = get(id) ?: return
+            saveRule(
+                rule.copy(
+                    enabled = enabled,
+                    status = if (enabled) AlertRuleStatus.WAITING else AlertRuleStatus.OFF,
+                    onceConsumed = if (enabled) false else rule.onceConsumed
+                )
+            )
+        }
+    }
+
+    private class RecordingNotifier : AlertNotifier {
+        val fires = mutableListOf<AlertFire>()
+        override fun notifyFired(fires: List<AlertFire>) {
+            this.fires += fires
+        }
+    }
 }
