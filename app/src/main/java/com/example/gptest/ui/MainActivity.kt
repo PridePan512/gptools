@@ -302,6 +302,7 @@ class MainActivity : AppCompatActivity() {
         card.tvCardPrice.text = data.price
         card.tvCardChangePercent.text = data.changePercent
         card.tvCardChange.text = data.change
+        applyChangeColor(card.tvCardPrice, data.changePercent)
         applyChangeColor(card.tvCardChangePercent, data.changePercent)
         applyChangeColor(card.tvCardChange, data.changePercent)
         card.tvOpen.text = data.open

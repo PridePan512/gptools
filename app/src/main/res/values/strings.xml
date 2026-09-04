@@ -16,9 +16,9 @@
     <string name="undo">撤销</string>
     <string name="snackbar_deleted">已删除 %1$s</string>
     <string name="column_name">名称</string>
-    <string name="column_code">代码</string>
     <string name="column_price">当前价</string>
     <string name="column_change">涨跌幅</string>
+    <string name="column_change_amount">涨跌</string>
     <string name="start">开始</string>
     <string name="stop">停止</string>
     <string name="status_idle">未开始</string>

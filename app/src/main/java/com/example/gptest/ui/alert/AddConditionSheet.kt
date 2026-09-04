@@ -49,15 +49,18 @@ class AddConditionSheet(
             binding.actMetric.setText(AlertMetric.PRICE.label, false)
             binding.actOperator.setText(AlertOperator.CROSS_UP.label, false)
         }
-        refreshCompareVisibility()
+        refreshValueVisibility()
         refreshPreview()
 
         binding.switchCompare.setOnCheckedChangeListener { _, _ ->
-            refreshCompareVisibility()
+            refreshValueVisibility()
             refreshPreview()
         }
         listOf(binding.actStock, binding.actMetric, binding.actOperator, binding.actCompareStock).forEach { view ->
-            view.setOnItemClickListener { _, _, _, _ -> refreshPreview() }
+            view.setOnItemClickListener { _, _, _, _ ->
+                refreshValueVisibility()
+                refreshPreview()
+            }
         }
         binding.etValue.setOnFocusChangeListener { _, _ -> refreshPreview() }
         binding.etValue.addTextChangedListener(SimpleTextWatcher { refreshPreview() })
@@ -71,21 +74,28 @@ class AddConditionSheet(
             Toast.makeText(binding.root.context, R.string.alert_condition_need_stock, Toast.LENGTH_SHORT).show()
             return
         }
-        val metric = AlertMetric.entries.find { it.label == binding.actMetric.text.toString() }
-            ?: AlertMetric.PRICE
         val operator = AlertOperator.entries.find { it.label == binding.actOperator.text.toString() }
             ?: AlertOperator.CROSS_UP
-        val compare = if (binding.switchCompare.isChecked) {
+        val metric = if (operator.needsValue) {
+            AlertMetric.entries.find { it.label == binding.actMetric.text.toString() } ?: AlertMetric.PRICE
+        } else {
+            AlertMetric.PRICE
+        }
+        val compare = if (operator.needsValue && binding.switchCompare.isChecked) {
             selectedStock(binding.actCompareStock.text.toString())
         } else {
             null
         }
-        if (binding.switchCompare.isChecked && compare == null) {
+        if (operator.needsValue && binding.switchCompare.isChecked && compare == null) {
             Toast.makeText(binding.root.context, R.string.alert_condition_need_stock, Toast.LENGTH_SHORT).show()
             return
         }
-        val number = binding.etValue.text?.toString().orEmpty().trim()
-        if (!binding.switchCompare.isChecked && number.isEmpty()) {
+        val number = if (operator.needsValue) {
+            binding.etValue.text?.toString().orEmpty().trim()
+        } else {
+            ""
+        }
+        if (operator.needsValue && !binding.switchCompare.isChecked && number.isEmpty()) {
             Toast.makeText(binding.root.context, R.string.alert_condition_need_value, Toast.LENGTH_SHORT).show()
             return
         }
@@ -102,7 +112,18 @@ class AddConditionSheet(
         dialog.dismiss()
     }
 
-    private fun refreshCompareVisibility() {
+    private fun refreshValueVisibility() {
+        val operator = AlertOperator.entries.find { it.label == binding.actOperator.text.toString() }
+            ?: AlertOperator.CROSS_UP
+        if (!operator.needsValue) {
+            binding.tilMetric.visibility = View.GONE
+            binding.switchCompare.visibility = View.GONE
+            binding.tilValue.visibility = View.GONE
+            binding.tilCompareStock.visibility = View.GONE
+            return
+        }
+        binding.tilMetric.visibility = View.VISIBLE
+        binding.switchCompare.visibility = View.VISIBLE
         val compare = binding.switchCompare.isChecked
         binding.tilValue.visibility = if (compare) View.GONE else View.VISIBLE
         binding.tilCompareStock.visibility = if (compare) View.VISIBLE else View.GONE

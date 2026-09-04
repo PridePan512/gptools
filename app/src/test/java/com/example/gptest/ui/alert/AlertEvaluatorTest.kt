@@ -129,6 +129,77 @@ class AlertEvaluatorTest {
         assertEquals("9/1 09:05", AlertEvaluator.formatTriggered(earlier, now))
     }
 
+    @Test
+    fun limitUp_matchesWhenPriceReachesLimit() {
+        val condition = board(AlertOperator.LIMIT_UP)
+        assertTrue(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "10.00", limitUp = "10.00", limitDown = "8.00")),
+                emptyMap()
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "9.99", limitUp = "10.00", limitDown = "8.00")),
+                emptyMap()
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "10.00")),
+                emptyMap()
+            )
+        )
+    }
+
+    @Test
+    fun limitDown_matchesWhenPriceReachesLimit() {
+        val condition = board(AlertOperator.LIMIT_DOWN)
+        assertTrue(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "8.00", limitUp = "10.00", limitDown = "8.00")),
+                emptyMap()
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "8.01", limitUp = "10.00", limitDown = "8.00")),
+                emptyMap()
+            )
+        )
+    }
+
+    @Test
+    fun openLimitUp_needsPreviousTickAtLimit() {
+        val condition = board(AlertOperator.OPEN_LIMIT_UP)
+        val sealed = quote(tongding.code, price = "10.00", limitUp = "10.00", limitDown = "8.00")
+        val opened = quote(tongding.code, price = "9.80", limitUp = "10.00", limitDown = "8.00")
+        assertTrue(AlertEvaluator.isSatisfied(condition, mapOf(tongding.code to opened), mapOf(tongding.code to sealed)))
+        assertFalse(AlertEvaluator.isSatisfied(condition, mapOf(tongding.code to opened), emptyMap()))
+        assertFalse(AlertEvaluator.isSatisfied(condition, mapOf(tongding.code to sealed), mapOf(tongding.code to sealed)))
+        assertFalse(AlertEvaluator.isSatisfied(condition, mapOf(tongding.code to opened), mapOf(tongding.code to opened)))
+    }
+
+    @Test
+    fun openLimitDown_needsPreviousTickAtLimit() {
+        val condition = board(AlertOperator.OPEN_LIMIT_DOWN)
+        val sealed = quote(tongding.code, price = "8.00", limitUp = "10.00", limitDown = "8.00")
+        val opened = quote(tongding.code, price = "8.20", limitUp = "10.00", limitDown = "8.00")
+        assertTrue(AlertEvaluator.isSatisfied(condition, mapOf(tongding.code to opened), mapOf(tongding.code to sealed)))
+        assertFalse(AlertEvaluator.isSatisfied(condition, mapOf(tongding.code to sealed), mapOf(tongding.code to sealed)))
+    }
+
+    @Test
+    fun boardSentence_omitsThreshold() {
+        assertEquals("通鼎互联  撬开涨停", board(AlertOperator.OPEN_LIMIT_UP).sentence())
+        assertEquals("通鼎互联  跌停", board(AlertOperator.LIMIT_DOWN).sentence())
+    }
+
     private fun priceAbove(threshold: Double): AlertCondition {
         return AlertCondition(
             id = "c1",
@@ -160,10 +231,21 @@ class AlertEvaluatorTest {
         )
     }
 
+    private fun board(operator: AlertOperator): AlertCondition {
+        return AlertCondition(
+            id = "c1",
+            stock = tongding,
+            metric = AlertMetric.PRICE,
+            operator = operator
+        )
+    }
+
     private fun quote(
         code: String,
         price: String = "10",
-        change: String = "0"
+        change: String = "0",
+        limitUp: String = "",
+        limitDown: String = ""
     ): QuoteSnapshot {
         val fields = MutableList(50) { "" }
         fields[2] = code.takeLast(6)
@@ -172,6 +254,8 @@ class AlertEvaluatorTest {
         fields[37] = "100"
         fields[38] = "1"
         fields[43] = "2"
+        fields[47] = limitUp
+        fields[48] = limitDown
         return QuoteSnapshot(code, code, price, change, fields)
     }
 }

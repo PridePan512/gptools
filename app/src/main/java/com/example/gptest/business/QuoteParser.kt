@@ -102,23 +102,35 @@ object QuoteParser {
     fun normalizeStockCode(code: String): String? {
         val trimmed = code.trim().lowercase()
         if (trimmed.isEmpty()) return null
-        if (prefixedCode.matches(trimmed)) return trimmed
-        if (!sixDigitCode.matches(trimmed)) return null
-        val prefix = when (trimmed.first()) {
-            '6', '9', '5' -> "sh"
-            '0', '1', '3' -> "sz"
-            '4', '8' -> "bj"
-            else -> return null
+        if (prefixedCode.matches(trimmed)) {
+            val digits = trimmed.drop(2)
+            return if (digits.startsWith("92")) "bj$digits" else trimmed
         }
+        if (!sixDigitCode.matches(trimmed)) return null
+        val prefix = marketPrefix(trimmed) ?: return null
         return prefix + trimmed
     }
 
+    private fun marketPrefix(digits: String): String? {
+        if (digits.startsWith("92")) return "bj"
+        return when (digits.first()) {
+            '6', '9', '5' -> "sh"
+            '0', '1', '3' -> "sz"
+            '4', '8' -> "bj"
+            else -> null
+        }
+    }
+
     fun formatChangePercent(raw: String): String {
-        val trimmed = raw.trim().removeSuffix("%")
-        if (trimmed.isEmpty()) return "--"
-        val number = trimmed.toDoubleOrNull() ?: return "$trimmed%"
-        val unsigned = trimmed.removePrefix("+")
-        return if (number > 0) "+$unsigned%" else "$unsigned%"
+        val formatted = formatSignedNumber(raw)
+        if (formatted == "--" || formatted.endsWith("%")) return formatted
+        return "$formatted%"
+    }
+
+    fun formatChangeAmount(raw: String): String = formatSignedNumber(raw)
+
+    fun changeAmount(quote: QuoteSnapshot): String {
+        return quote.fields.getOrNull(CHANGE_INDEX)?.trim().orEmpty()
     }
 
     fun changePercentValue(raw: String): Double? {
@@ -130,7 +142,53 @@ object QuoteParser {
         return if (value == null || value < 1L) 5L else value
     }
 
+    fun isAtLimitUp(quote: QuoteSnapshot?): Boolean {
+        if (quote == null) return false
+        val price = numericField(quote.price) ?: return false
+        val limit = numericField(quote.fields.getOrNull(LIMIT_UP_INDEX)) ?: return false
+        return price + PRICE_EPSILON >= limit
+    }
+
+    fun isAtLimitDown(quote: QuoteSnapshot?): Boolean {
+        if (quote == null) return false
+        val price = numericField(quote.price) ?: return false
+        val limit = numericField(quote.fields.getOrNull(LIMIT_DOWN_INDEX)) ?: return false
+        return price - PRICE_EPSILON <= limit
+    }
+
+    fun limitBoard(quote: QuoteSnapshot?): LimitBoard {
+        return when {
+            isAtLimitUp(quote) -> LimitBoard.UP
+            isAtLimitDown(quote) -> LimitBoard.DOWN
+            else -> LimitBoard.NONE
+        }
+    }
+
+    private fun formatSignedNumber(raw: String): String {
+        val trimmed = raw.trim().removeSuffix("%")
+        if (trimmed.isEmpty()) return "--"
+        val number = trimmed.toDoubleOrNull() ?: return trimmed
+        val unsigned = trimmed.removePrefix("+")
+        return if (number > 0) "+$unsigned" else unsigned
+    }
+
+    private fun numericField(raw: String?): Double? {
+        val value = raw?.trim()?.removeSuffix("%")?.removePrefix("+")
+        if (value.isNullOrEmpty() || value == "--") return null
+        return value.toDoubleOrNull()
+    }
+
     private val QUOTE_BLOCK = Regex("""v_([a-zA-Z]{2}\d+)="([^"]*)"""")
+    private const val CHANGE_INDEX = 31
     private const val CHANGE_PERCENT_INDEX = 32
+    private const val LIMIT_UP_INDEX = 47
+    private const val LIMIT_DOWN_INDEX = 48
+    private const val PRICE_EPSILON = 0.0001
     const val SHANGHAI_INDEX_CODE = "sh000001"
+}
+
+enum class LimitBoard {
+    NONE,
+    UP,
+    DOWN
 }

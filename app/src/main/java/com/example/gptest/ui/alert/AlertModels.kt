@@ -11,11 +11,15 @@ enum class AlertMetric(val label: String, val suffix: String) {
     AMPLITUDE("振幅", "%")
 }
 
-enum class AlertOperator(val label: String) {
+enum class AlertOperator(val label: String, val needsValue: Boolean = true) {
     GTE("高于"),
     LTE("低于"),
     CROSS_UP("涨到"),
-    CROSS_DOWN("跌破")
+    CROSS_DOWN("跌破"),
+    LIMIT_UP("涨停", needsValue = false),
+    LIMIT_DOWN("跌停", needsValue = false),
+    OPEN_LIMIT_UP("撬开涨停", needsValue = false),
+    OPEN_LIMIT_DOWN("撬开跌停", needsValue = false)
 }
 
 enum class AlertMatchMode(val label: String, val joiner: String) {
@@ -72,6 +76,9 @@ data class AlertCondition(
     val compareStock: AlertStockOption? = null
 ) {
     fun sentence(): String {
+        if (!operator.needsValue) {
+            return "${stock.name}  ${operator.label}"
+        }
         val target = compareStock?.name ?: (numberValue + metric.suffix)
         return "${stock.name}  ${metric.label}  ${operator.label}  $target"
     }

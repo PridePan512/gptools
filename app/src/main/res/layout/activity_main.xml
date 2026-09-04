@@ -184,23 +184,24 @@
                 android:textAppearance="?attr/textAppearanceCaption" />
 
             <TextView
-                android:layout_width="64dp"
-                android:layout_height="wrap_content"
-                android:text="@string/column_code"
-                android:textAppearance="?attr/textAppearanceCaption" />
-
-            <TextView
-                android:layout_width="64dp"
+                android:layout_width="80dp"
                 android:layout_height="wrap_content"
                 android:gravity="end"
                 android:text="@string/column_price"
                 android:textAppearance="?attr/textAppearanceCaption" />
 
             <TextView
-                android:layout_width="72dp"
+                android:layout_width="80dp"
                 android:layout_height="wrap_content"
                 android:gravity="end"
                 android:text="@string/column_change"
+                android:textAppearance="?attr/textAppearanceCaption" />
+
+            <TextView
+                android:layout_width="80dp"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:text="@string/column_change_amount"
                 android:textAppearance="?attr/textAppearanceCaption" />
         </LinearLayout>
 

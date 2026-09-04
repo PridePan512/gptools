@@ -56,21 +56,45 @@ class QuoteDiffCallbackTest {
         assertEquals(0, recorder.changed)
     }
 
+    @Test
+    fun limitBoardChange_dispatchesChanged() {
+        val old = listOf(row(price = "10.00"))
+        val new = listOf(row(price = "10.00", limitUp = "10.00"))
+        val recorder = Recorder()
+        DiffUtil.calculateDiff(QuoteDiffCallback(old, new), true).dispatchUpdatesTo(recorder)
+        assertEquals(1, recorder.changed)
+    }
+
+    @Test
+    fun changeAmountChange_dispatchesChanged() {
+        val old = listOf(row(changeAmount = "0.10"))
+        val new = listOf(row(changeAmount = "0.12"))
+        val recorder = Recorder()
+        DiffUtil.calculateDiff(QuoteDiffCallback(old, new), true).dispatchUpdatesTo(recorder)
+        assertEquals(1, recorder.changed)
+    }
+
     private fun row(
         code: String = "sz000001",
         name: String = "测试",
         price: String = "10.00",
         change: String = "1.00",
+        changeAmount: String = "0.10",
         time: String = "10:00:00",
         selected: Boolean = false,
-        dragEnabled: Boolean = false
+        dragEnabled: Boolean = false,
+        limitUp: String = "",
+        limitDown: String = ""
     ): QuoteRow {
-        val fields = MutableList(40) { "" }
+        val fields = MutableList(50) { "" }
         fields[1] = name
         fields[2] = code.takeLast(6)
         fields[3] = price
         fields[30] = time
+        fields[31] = changeAmount
         fields[32] = change
+        fields[47] = limitUp
+        fields[48] = limitDown
         return QuoteRow(
             quote = QuoteSnapshot(code, name, price, change, fields),
             selected = selected,

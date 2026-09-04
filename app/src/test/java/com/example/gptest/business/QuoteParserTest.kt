@@ -1,6 +1,7 @@
 package com.example.gptest.business
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -47,6 +48,19 @@ class QuoteParserTest {
     @Test
     fun normalizeStockCode_sixDigitBj() {
         assertEquals("bj430047", QuoteParser.normalizeStockCode("430047"))
+        assertEquals("bj830001", QuoteParser.normalizeStockCode("830001"))
+    }
+
+    @Test
+    fun normalizeStockCode_beijingNewListing_usesBjNotSh() {
+        assertEquals("bj920289", QuoteParser.normalizeStockCode("920289"))
+        assertEquals("bj920289", QuoteParser.normalizeStockCode("SH920289"))
+    }
+
+    @Test
+    fun normalizeStockCode_shanghaiBShare_staysSh() {
+        assertEquals("sh900901", QuoteParser.normalizeStockCode("900901"))
+        assertEquals("sh900901", QuoteParser.normalizeStockCode("sh900901"))
     }
 
     @Test
@@ -180,5 +194,48 @@ class QuoteParserTest {
         assertEquals("0%", QuoteParser.formatChangePercent("0"))
         assertEquals("--", QuoteParser.formatChangePercent(""))
         assertEquals("+2.1%", QuoteParser.formatChangePercent("+2.1%"))
+    }
+
+    @Test
+    fun formatChangeAmount_addsSignWithoutPercent() {
+        assertEquals("+0.31", QuoteParser.formatChangeAmount("0.31"))
+        assertEquals("-0.31", QuoteParser.formatChangeAmount("-0.31"))
+        assertEquals("0", QuoteParser.formatChangeAmount("0"))
+        assertEquals("--", QuoteParser.formatChangeAmount(""))
+        assertEquals("+1.2", QuoteParser.formatChangeAmount("+1.2"))
+    }
+
+    @Test
+    fun changeAmount_readsField31() {
+        val fields = MutableList(33) { "" }
+        fields[1] = "通鼎互联"
+        fields[2] = "002491"
+        fields[3] = "21.15"
+        fields[31] = "-0.31"
+        fields[32] = "-1.44"
+        val quote = QuoteParser.parseQuote("""v_sz002491="${fields.joinToString("~")}";""")!!
+        assertEquals("-0.31", QuoteParser.changeAmount(quote))
+    }
+
+    @Test
+    fun limitBoard_detectsUpDownAndNone() {
+        assertEquals(LimitBoard.UP, QuoteParser.limitBoard(limitQuote(price = "10.00", limitUp = "10.00", limitDown = "8.00")))
+        assertEquals(LimitBoard.DOWN, QuoteParser.limitBoard(limitQuote(price = "8.00", limitUp = "10.00", limitDown = "8.00")))
+        assertEquals(LimitBoard.NONE, QuoteParser.limitBoard(limitQuote(price = "9.00", limitUp = "10.00", limitDown = "8.00")))
+        assertEquals(LimitBoard.NONE, QuoteParser.limitBoard(limitQuote(price = "10.00")))
+        assertFalse(QuoteParser.isAtLimitUp(null))
+        assertFalse(QuoteParser.isAtLimitDown(null))
+    }
+
+    private fun limitQuote(
+        price: String,
+        limitUp: String = "",
+        limitDown: String = ""
+    ): QuoteSnapshot {
+        val fields = MutableList(50) { "" }
+        fields[3] = price
+        fields[47] = limitUp
+        fields[48] = limitDown
+        return QuoteSnapshot("sz000001", "测试", price, "0", fields)
     }
 }

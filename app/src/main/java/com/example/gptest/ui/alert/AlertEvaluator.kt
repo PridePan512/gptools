@@ -2,6 +2,7 @@ package com.example.gptest.ui.alert
 
 import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.business.TradingSession
+import com.example.gptest.business.QuoteParser
 import java.time.Instant
 import java.time.ZonedDateTime
 
@@ -76,7 +77,11 @@ object AlertEvaluator {
         currentByCode: Map<String, QuoteSnapshot>,
         previousByCode: Map<String, QuoteSnapshot>
     ): Boolean {
-        val current = metricValue(currentByCode[condition.stock.code], condition.metric) ?: return false
+        val quote = currentByCode[condition.stock.code]
+        if (!condition.operator.needsValue) {
+            return boardSatisfied(condition.operator, quote, previousByCode[condition.stock.code])
+        }
+        val current = metricValue(quote, condition.metric) ?: return false
         val target = targetValue(condition, currentByCode) ?: return false
         return when (condition.operator) {
             AlertOperator.GTE -> current >= target
@@ -91,6 +96,10 @@ object AlertEvaluator {
                 val previousTarget = targetValue(condition, previousByCode) ?: target
                 previous > previousTarget && current <= target
             }
+            AlertOperator.LIMIT_UP,
+            AlertOperator.LIMIT_DOWN,
+            AlertOperator.OPEN_LIMIT_UP,
+            AlertOperator.OPEN_LIMIT_DOWN -> false
         }
     }
 
@@ -134,9 +143,28 @@ object AlertEvaluator {
         condition: AlertCondition,
         quotes: Map<String, QuoteSnapshot>
     ): String {
-        val current = metricValue(quotes[condition.stock.code], condition.metric)
+        val quote = quotes[condition.stock.code]
+        if (!condition.operator.needsValue) {
+            val price = metricValue(quote, AlertMetric.PRICE)?.let { formatMetric(it, AlertMetric.PRICE) } ?: "--"
+            return "${condition.sentence()}（当前 $price）"
+        }
+        val current = metricValue(quote, condition.metric)
         val shown = current?.let { formatMetric(it, condition.metric) } ?: "--"
         return "${condition.sentence()}（当前 $shown）"
+    }
+
+    private fun boardSatisfied(
+        operator: AlertOperator,
+        current: QuoteSnapshot?,
+        previous: QuoteSnapshot?
+    ): Boolean {
+        return when (operator) {
+            AlertOperator.LIMIT_UP -> QuoteParser.isAtLimitUp(current)
+            AlertOperator.LIMIT_DOWN -> QuoteParser.isAtLimitDown(current)
+            AlertOperator.OPEN_LIMIT_UP -> current != null && QuoteParser.isAtLimitUp(previous) && !QuoteParser.isAtLimitUp(current)
+            AlertOperator.OPEN_LIMIT_DOWN -> current != null && QuoteParser.isAtLimitDown(previous) && !QuoteParser.isAtLimitDown(current)
+            else -> false
+        }
     }
 
     private fun formatMetric(value: Double, metric: AlertMetric): String {

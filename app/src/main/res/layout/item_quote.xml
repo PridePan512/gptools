@@ -32,24 +32,32 @@
             android:textAppearance="?attr/textAppearanceBody1" />
 
         <TextView
-            android:id="@+id/tvCode"
-            android:layout_width="64dp"
-            android:layout_height="wrap_content"
-            android:textAppearance="?attr/textAppearanceBody2" />
-
-        <TextView
             android:id="@+id/tvRowPrice"
-            android:layout_width="64dp"
+            android:layout_width="80dp"
             android:layout_height="wrap_content"
+            android:ellipsize="end"
             android:gravity="end"
+            android:lines="1"
             android:textAppearance="?attr/textAppearanceBody1"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvChangePercent"
-            android:layout_width="72dp"
+            android:layout_width="80dp"
             android:layout_height="wrap_content"
+            android:ellipsize="end"
             android:gravity="end"
+            android:lines="1"
+            android:textAppearance="?attr/textAppearanceBody2"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvChangeAmount"
+            android:layout_width="80dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="end"
+            android:lines="1"
             android:textAppearance="?attr/textAppearanceBody2"
             android:textStyle="bold" />
     </LinearLayout>

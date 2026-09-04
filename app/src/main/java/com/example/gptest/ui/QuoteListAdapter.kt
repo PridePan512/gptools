@@ -8,6 +8,7 @@ import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.example.gptest.R
+import com.example.gptest.business.LimitBoard
 import com.example.gptest.business.QuoteParser
 import com.example.gptest.business.QuoteSnapshot
 
@@ -27,7 +28,8 @@ data class QuoteRow(
             quote.name == other.quote.name &&
             quote.price == other.quote.price &&
             quote.changePercent == other.quote.changePercent &&
-            QuoteListAdapter.displayCode(quote) == QuoteListAdapter.displayCode(other.quote)
+            QuoteParser.changeAmount(quote) == QuoteParser.changeAmount(other.quote) &&
+            QuoteParser.limitBoard(quote) == QuoteParser.limitBoard(other.quote)
     }
 }
 
@@ -120,9 +122,10 @@ class QuoteListAdapter(
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val content: View = itemView.findViewById(R.id.quoteRowContent)
         private val tvName: TextView = itemView.findViewById(R.id.tvName)
-        private val tvCode: TextView = itemView.findViewById(R.id.tvCode)
         private val tvPrice: TextView = itemView.findViewById(R.id.tvRowPrice)
         private val tvChange: TextView = itemView.findViewById(R.id.tvChangePercent)
+        private val tvChangeAmount: TextView = itemView.findViewById(R.id.tvChangeAmount)
+        private val defaultNameColor = tvName.currentTextColor
         private val touchListener = SwipeToDeleteTouchListener(
             content = content,
             onClick = { currentRow()?.let { onClick(it.quote) } },
@@ -142,10 +145,18 @@ class QuoteListAdapter(
             }
             val quote = row.quote
             tvName.text = quote.name.ifEmpty { "--" }
-            tvCode.text = displayCode(quote)
             tvPrice.text = quote.price.ifEmpty { "--" }
             tvChange.text = QuoteParser.formatChangePercent(quote.changePercent)
+            tvChangeAmount.text = QuoteParser.formatChangeAmount(QuoteParser.changeAmount(quote))
+            applyChangeColor(tvPrice, quote.changePercent)
             applyChangeColor(tvChange, quote.changePercent)
+            applyChangeColor(tvChangeAmount, quote.changePercent)
+            val boardColor = when (QuoteParser.limitBoard(quote)) {
+                LimitBoard.UP -> itemView.context.getColor(R.color.quote_up)
+                LimitBoard.DOWN -> itemView.context.getColor(R.color.quote_down)
+                LimitBoard.NONE -> null
+            }
+            tvName.setTextColor(boardColor ?: defaultNameColor)
             content.setBackgroundResource(
                 if (row.selected) R.drawable.bg_quote_row_selected else R.drawable.bg_quote_row
             )
