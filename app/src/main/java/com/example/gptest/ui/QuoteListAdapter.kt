@@ -15,7 +15,21 @@ data class QuoteRow(
     val quote: QuoteSnapshot,
     val selected: Boolean,
     val dragEnabled: Boolean
-)
+) {
+    fun sameIdentity(other: QuoteRow): Boolean {
+        return quote.requestCode == other.quote.requestCode
+    }
+
+    fun sameVisible(other: QuoteRow): Boolean {
+        return sameIdentity(other) &&
+            selected == other.selected &&
+            dragEnabled == other.dragEnabled &&
+            quote.name == other.quote.name &&
+            quote.price == other.quote.price &&
+            quote.changePercent == other.quote.changePercent &&
+            QuoteListAdapter.displayCode(quote) == QuoteListAdapter.displayCode(other.quote)
+    }
+}
 
 class QuoteDiffCallback(
     private val oldList: List<QuoteRow>,
@@ -27,12 +41,19 @@ class QuoteDiffCallback(
     override fun getNewListSize(): Int = newList.size
 
     override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-        return oldList[oldItemPosition].quote.requestCode ==
-            newList[newItemPosition].quote.requestCode
+        return oldList[oldItemPosition].sameIdentity(newList[newItemPosition])
     }
 
     override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
-        return oldList[oldItemPosition] == newList[newItemPosition]
+        return oldList[oldItemPosition].sameVisible(newList[newItemPosition])
+    }
+
+    override fun getChangePayload(oldItemPosition: Int, newItemPosition: Int): Any {
+        return PAYLOAD_VISUAL
+    }
+
+    companion object {
+        const val PAYLOAD_VISUAL = "quote_visual"
     }
 }
 
@@ -57,6 +78,13 @@ class QuoteListAdapter(
                 dragEnabled = dragEnabled
             )
         }
+        if (items.size == newItems.size && items.indices.all { items[it].sameVisible(newItems[it]) }) {
+            items.clear()
+            items.addAll(newItems)
+            selectedCode = selected
+            this.dragEnabled = dragEnabled
+            return
+        }
         val diff = DiffUtil.calculateDiff(QuoteDiffCallback(items.toList(), newItems), true)
         items.clear()
         items.addAll(newItems)
@@ -71,7 +99,15 @@ class QuoteListAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(items[position])
+        holder.bind(items[position], resetSwipe = true)
+    }
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isEmpty() || payloads.none { it == QuoteDiffCallback.PAYLOAD_VISUAL }) {
+            onBindViewHolder(holder, position)
+            return
+        }
+        holder.bind(items[position], resetSwipe = false)
     }
 
     override fun onViewRecycled(holder: ViewHolder) {
@@ -100,8 +136,10 @@ class QuoteListAdapter(
             content.setOnTouchListener(touchListener)
         }
 
-        fun bind(row: QuoteRow) {
-            resetSwipe()
+        fun bind(row: QuoteRow, resetSwipe: Boolean) {
+            if (resetSwipe) {
+                resetSwipe()
+            }
             val quote = row.quote
             tvName.text = quote.name.ifEmpty { "--" }
             tvCode.text = displayCode(quote)
