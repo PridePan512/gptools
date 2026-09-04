@@ -52,6 +52,7 @@ class QuoteMonitor(
     private var intervalMs = intervalSeconds * 1000L
     private var pollJob: Job? = null
     private var pendingUndo: PendingUndo? = null
+    private var lastUpdatedMs: Long? = null
 
     private val _uiState = MutableStateFlow(buildState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
@@ -215,6 +216,7 @@ class QuoteMonitor(
             onSuccess = { latest ->
                 val previous = quotes
                 quotes = latest
+                lastUpdatedMs = clock.millis()
                 publish()
                 evaluateAlerts(previous, latest)
             },
@@ -300,6 +302,7 @@ class QuoteMonitor(
             isRunning = isRunning,
             watchlistLoaded = watchlistLoaded,
             intervalSeconds = intervalSeconds,
+            lastUpdatedMs = lastUpdatedMs,
             status = status
         )
     }

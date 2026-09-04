@@ -26,12 +26,17 @@ import com.example.gptest.ui.alert.AlertRulesActivity
 import com.example.gptest.ui.alert.AlertWatchlistExtras
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.format.DateTimeFormatter
 import java.util.Collections
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var quoteAdapter: QuoteListAdapter
+
+    private val lastUpdatedFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+        .withZone(TradingSession.SHANGHAI)
 
     private val viewModel: MainViewModel by viewModels {
         MainViewModelFactory(
@@ -129,8 +134,21 @@ class MainActivity : AppCompatActivity() {
         binding.root.keepScreenOn = state.isRunning
         binding.btnSort.setText(sortLabel(state.sortMode))
         binding.tvStatus.text = statusText(state.status)
+        bindLastUpdated(state.lastUpdatedMs)
         quoteAdapter.submit(state.rows, state.selectedCode, state.dragEnabled)
         bindSelectedCard(state)
+    }
+
+    private fun bindLastUpdated(ms: Long?) {
+        if (ms == null) {
+            binding.tvLastUpdated.visibility = View.GONE
+            return
+        }
+        binding.tvLastUpdated.visibility = View.VISIBLE
+        binding.tvLastUpdated.text = getString(
+            R.string.quote_last_updated,
+            lastUpdatedFormatter.format(Instant.ofEpochMilli(ms))
+        )
     }
 
     private fun addCode() {

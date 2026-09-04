@@ -5,6 +5,7 @@
     <string name="interval_hint">检测间隔（秒）</string>
     <string name="interval_default">5</string>
     <string name="quote_list_label">行情列表</string>
+    <string name="quote_last_updated">最近更新 %1$s</string>
     <string name="swipe_to_delete_hint">左滑删除；自定义排序时长按拖动调整顺序</string>
     <string name="sort_custom">自定义</string>
     <string name="sort_change">涨跌幅</string>

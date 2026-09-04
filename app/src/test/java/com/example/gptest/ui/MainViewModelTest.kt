@@ -161,6 +161,7 @@ class MainViewModelTest {
         assertEquals("11.00", vm.uiState.value.rows.single().price)
         assertFalse(vm.uiState.value.isRunning)
         assertEquals(QuoteStatus.SessionOnce(TradingSession.Phase.CLOSED), vm.uiState.value.status)
+        assertEquals(closedClock().millis(), vm.uiState.value.lastUpdatedMs)
     }
 
     @Test
@@ -175,6 +176,7 @@ class MainViewModelTest {
         advanceUntilIdle()
         assertEquals(QuoteStatus.InvalidResponse, vm.uiState.value.status)
         assertFalse(vm.uiState.value.isRunning)
+        assertEquals(null, vm.uiState.value.lastUpdatedMs)
     }
 
     @Test

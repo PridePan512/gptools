@@ -35,5 +35,6 @@ data class MainUiState(
     val isRunning: Boolean = false,
     val watchlistLoaded: Boolean = false,
     val intervalSeconds: Long = 5L,
+    val lastUpdatedMs: Long? = null,
     val status: QuoteStatus = QuoteStatus.Idle
 )
