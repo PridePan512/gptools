@@ -2,4 +2,6 @@
 <resources>
     <color name="quote_panel_bg">#33FFFFFF</color>
     <color name="quote_flat">#BDBDBD</color>
+
+    <color name="day_black_night_white">#FFFFFF</color>
 </resources>

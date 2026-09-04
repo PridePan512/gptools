@@ -268,6 +268,24 @@ class MainViewModelTest {
     }
 
     @Test
+    fun startPolling_usesSavedIntervalFromUiState() = runTest(dispatcher) {
+        val store = FakeSortStore(intervalSeconds = 5)
+        val vm = viewModel(
+            quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50")))),
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            sortStore = store,
+            clock = closedClock()
+        )
+        advanceUntilIdle()
+        vm.saveInterval("8")
+        advanceUntilIdle()
+        vm.startPolling(vm.uiState.value.intervalSeconds.toString())
+        advanceUntilIdle()
+        assertEquals(8L, store.intervalSeconds)
+        assertEquals(8L, vm.uiState.value.intervalSeconds)
+    }
+
+    @Test
     fun removeCode_emitsUndoEvent_andDropsRow() = runTest(dispatcher) {
         val vm = viewModel(
             quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50")))),

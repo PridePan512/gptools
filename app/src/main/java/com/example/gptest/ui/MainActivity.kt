@@ -1,12 +1,16 @@
 package com.example.gptest.ui
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.activity.viewModels
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -25,7 +29,9 @@ import com.example.gptest.databinding.ActivityMainBinding
 import com.example.gptest.ui.alert.AlertNotificationPermission
 import com.example.gptest.ui.alert.AlertRulesActivity
 import com.example.gptest.ui.alert.AlertWatchlistExtras
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.format.DateTimeFormatter
@@ -35,6 +41,10 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var quoteAdapter: QuoteListAdapter
+    private var addStockDialog: AlertDialog? = null
+    private var settingsDialog: AlertDialog? = null
+    private var settingsIntervalInput: TextInputEditText? = null
+    private var watchlistMenuReady = false
 
     private val lastUpdatedFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
         .withZone(TradingSession.SHANGHAI)
@@ -52,50 +62,40 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
-        applyEdgeToEdgeInsets(binding.root, binding.toolbar, binding.content)
+        applyEdgeToEdgeInsets(binding.root, binding.toolbar, binding.content, binding.fabMonitor)
         setupQuoteList()
         binding.btnSort.setOnClickListener { showSortMenu() }
-        binding.btnAlerts.setOnClickListener {
-            startActivity(
-                AlertWatchlistExtras.put(
-                    Intent(this, AlertRulesActivity::class.java),
-                    AlertWatchlistExtras.fromQuotes(viewModel.uiState.value.rows)
-                )
-            )
-        }
-        binding.btnAdd.setOnClickListener { addCode() }
-        binding.btnAdd.isEnabled = false
-        binding.etStockCode.isEnabled = false
-        binding.etStockCode.setOnEditorActionListener { view, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                addCode()
-                dismissKeyboard(view)
-                true
-            } else {
-                false
-            }
-        }
-        binding.btnStart.setOnClickListener {
-            AlertNotificationPermission.requestIfNeeded(this)
-            viewModel.startPolling(binding.etInterval.text?.toString().orEmpty())
-        }
-        binding.etInterval.setOnEditorActionListener { view, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                viewModel.saveInterval(binding.etInterval.text?.toString().orEmpty())
-                dismissKeyboard(view)
-                true
-            } else {
-                false
-            }
-        }
-        binding.btnStop.setOnClickListener { viewModel.stopPolling() }
+        binding.fabMonitor.setOnClickListener { toggleMonitor() }
         binding.quoteCard.tvToggleRaw.setOnClickListener { viewModel.toggleRaw() }
         observeViewModel()
     }
 
-    override fun onStop() {
-        viewModel.saveInterval(binding.etInterval.text?.toString().orEmpty())
-        super.onStop()
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.findItem(R.id.action_add)?.isEnabled = viewModel.uiState.value.watchlistLoaded
+        return super.onPrepareOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_alerts -> {
+                openAlerts()
+                true
+            }
+            R.id.action_add -> {
+                showAddStockDialog()
+                true
+            }
+            R.id.action_settings -> {
+                showSettingsDialog()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     private fun observeViewModel() {
@@ -108,7 +108,7 @@ class MainActivity : AppCompatActivity() {
                     viewModel.events.collect { event ->
                         when (event) {
                             is UiEvent.AddSucceeded -> {
-                                binding.etStockCode.text?.clear()
+                                addStockDialog?.dismiss()
                                 showMessage(getString(R.string.status_added, event.label))
                             }
                             UiEvent.AddEmptyCode -> showMessage(getString(R.string.status_empty_code))
@@ -123,22 +123,46 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun render(state: MainUiState) {
-        binding.btnAdd.isEnabled = state.watchlistLoaded
-        binding.etStockCode.isEnabled = state.watchlistLoaded
-        binding.etInterval.isEnabled = !state.isRunning
-        val intervalText = state.intervalSeconds.toString()
-        if (!binding.etInterval.hasFocus() && binding.etInterval.text?.toString() != intervalText) {
-            binding.etInterval.setText(intervalText)
+        if (watchlistMenuReady != state.watchlistLoaded) {
+            watchlistMenuReady = state.watchlistLoaded
+            invalidateOptionsMenu()
         }
-        binding.btnStart.isEnabled = !state.isRunning
-        binding.btnStop.isEnabled = state.isRunning
+        settingsIntervalInput?.isEnabled = !state.isRunning
+        settingsDialog?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = !state.isRunning
+        bindFab(state.isRunning)
         binding.root.keepScreenOn = state.isRunning
         binding.btnSort.setText(sortLabel(state.sortMode))
-        binding.tvStatus.text = statusText(state.status)
+        bindStatus(state.status)
         bindLastUpdated(state.lastUpdatedMs)
         bindShanghaiIndex(state.shanghaiIndex)
         quoteAdapter.submit(state.rows, state.selectedCode, state.dragEnabled)
         bindSelectedCard(state)
+    }
+
+    private fun bindFab(running: Boolean) {
+        binding.fabMonitor.setImageResource(if (running) R.drawable.ic_stop else R.drawable.ic_play)
+        binding.fabMonitor.contentDescription = getString(
+            if (running) R.string.fab_stop else R.string.fab_start
+        )
+        if (running) {
+            binding.fabMonitor.backgroundTintList = ColorStateList.valueOf(getColor(R.color.quote_up))
+            binding.fabMonitor.imageTintList = ColorStateList.valueOf(getColor(R.color.white))
+        } else {
+            binding.fabMonitor.backgroundTintList = ColorStateList.valueOf(
+                getColor(R.color.purple_500)
+            )
+            binding.fabMonitor.imageTintList = ColorStateList.valueOf(getColor(R.color.white))
+        }
+    }
+
+    private fun bindStatus(status: QuoteStatus) {
+        val text = statusLineText(status)
+        if (text == null) {
+            binding.tvStatus.visibility = View.GONE
+            return
+        }
+        binding.tvStatus.visibility = View.VISIBLE
+        binding.tvStatus.text = text
     }
 
     private fun bindLastUpdated(ms: Long?) {
@@ -166,8 +190,97 @@ class MainActivity : AppCompatActivity() {
         applyChangeColor(binding.tvIndexChange, quote?.changePercent.orEmpty())
     }
 
-    private fun addCode() {
-        viewModel.addCode(binding.etStockCode.text?.toString().orEmpty())
+    private fun toggleMonitor() {
+        if (viewModel.uiState.value.isRunning) {
+            viewModel.stopPolling()
+            return
+        }
+        AlertNotificationPermission.requestIfNeeded(this)
+        viewModel.startPolling(viewModel.uiState.value.intervalSeconds.toString())
+    }
+
+    private fun openAlerts() {
+        startActivity(
+            AlertWatchlistExtras.put(
+                Intent(this, AlertRulesActivity::class.java),
+                AlertWatchlistExtras.fromQuotes(viewModel.uiState.value.rows)
+            )
+        )
+    }
+
+    private fun showAddStockDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_add_stock, null)
+        val input = view.findViewById<TextInputEditText>(R.id.etAddStockCode)
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.add_stock)
+            .setView(view)
+            .setPositiveButton(R.string.add, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        val submit = {
+            viewModel.addCode(input.text?.toString().orEmpty())
+            dismissKeyboard(input)
+        }
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                submit()
+                true
+            } else {
+                false
+            }
+        }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled =
+                viewModel.uiState.value.watchlistLoaded
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { submit() }
+        }
+        dialog.setOnDismissListener {
+            if (addStockDialog == dialog) addStockDialog = null
+        }
+        addStockDialog = dialog
+        dialog.show()
+        input.requestFocus()
+    }
+
+    private fun showSettingsDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_settings, null)
+        val input = view.findViewById<TextInputEditText>(R.id.etSettingsInterval)
+        val running = viewModel.uiState.value.isRunning
+        input.setText(viewModel.uiState.value.intervalSeconds.toString())
+        input.isEnabled = !running
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.settings)
+            .setView(view)
+            .setPositiveButton(android.R.string.ok, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        val save = {
+            if (!viewModel.uiState.value.isRunning) {
+                viewModel.saveInterval(input.text?.toString().orEmpty())
+            }
+            dialog.dismiss()
+        }
+        input.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE && input.isEnabled) {
+                save()
+                true
+            } else {
+                false
+            }
+        }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = !running
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { save() }
+        }
+        dialog.setOnDismissListener {
+            if (settingsDialog == dialog) {
+                settingsDialog = null
+                settingsIntervalInput = null
+            }
+        }
+        settingsIntervalInput = input
+        settingsDialog = dialog
+        dialog.show()
     }
 
     private fun dismissKeyboard(view: View) {
@@ -176,7 +289,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMessage(text: String) {
-        Snackbar.make(binding.root, text, Snackbar.LENGTH_SHORT).show()
+        Snackbar.make(binding.root, text, Snackbar.LENGTH_SHORT)
+            .setAnchorView(binding.fabMonitor)
+            .show()
     }
 
     private fun showUndoSnackbar(label: String) {
@@ -184,7 +299,7 @@ class MainActivity : AppCompatActivity() {
             binding.root,
             getString(R.string.snackbar_deleted, label),
             Snackbar.LENGTH_LONG
-        ).setAction(R.string.undo) {
+        ).setAnchorView(binding.fabMonitor).setAction(R.string.undo) {
             viewModel.undoRemove()
         }.show()
     }
@@ -270,12 +385,9 @@ class MainActivity : AppCompatActivity() {
         QuoteSortMode.PRICE -> R.string.sort_price
     }
 
-    private fun statusText(status: QuoteStatus): String = when (status) {
-        QuoteStatus.Idle -> getString(R.string.status_idle)
-        QuoteStatus.Running -> getString(R.string.status_running)
-        QuoteStatus.Stopped -> getString(R.string.status_stopped)
-        QuoteStatus.InvalidCode -> getString(R.string.status_invalid_code)
-        QuoteStatus.DuplicateCode -> getString(R.string.status_duplicate_code)
+    private fun statusLineText(status: QuoteStatus): String? = when (status) {
+        QuoteStatus.Idle, QuoteStatus.Running, QuoteStatus.Stopped,
+        QuoteStatus.InvalidCode, QuoteStatus.DuplicateCode -> null
         QuoteStatus.EmptyWatchlist -> getString(R.string.status_empty_watchlist)
         QuoteStatus.InvalidResponse -> getString(R.string.status_invalid_response)
         is QuoteStatus.NetworkError -> getString(R.string.status_error, status.message)
@@ -283,7 +395,7 @@ class MainActivity : AppCompatActivity() {
             TradingSession.Phase.PRE_OPEN -> getString(R.string.status_preopen_once)
             TradingSession.Phase.LUNCH -> getString(R.string.status_lunch_once)
             TradingSession.Phase.CLOSED -> getString(R.string.status_closed_once)
-            TradingSession.Phase.OPEN -> getString(R.string.status_stopped)
+            TradingSession.Phase.OPEN -> null
         }
     }
 

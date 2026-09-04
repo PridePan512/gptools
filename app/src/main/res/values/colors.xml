@@ -12,4 +12,5 @@
     <color name="quote_down">#43A047</color>
     <color name="quote_flat">#757575</color>
     <color name="quote_delete_bg">#E53935</color>
+    <color name="day_black_night_white">#000000</color>
 </resources>

@@ -2,6 +2,8 @@
     <string name="app_name">GPTest</string>
     <string name="stock_code_hint">代码（个股/ETF）</string>
     <string name="add">添加</string>
+    <string name="add_stock">添加自选</string>
+    <string name="settings">设置</string>
     <string name="interval_hint">检测间隔（秒）</string>
     <string name="interval_default">5</string>
     <string name="quote_list_label">行情列表</string>
@@ -21,6 +23,8 @@
     <string name="column_change_amount">涨跌</string>
     <string name="start">开始</string>
     <string name="stop">停止</string>
+    <string name="fab_start">开始检测</string>
+    <string name="fab_stop">停止检测</string>
     <string name="status_idle">未开始</string>
     <string name="status_running">检测中</string>
     <string name="monitor_channel_name">盯盘检测</string>
