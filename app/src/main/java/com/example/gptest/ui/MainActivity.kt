@@ -20,16 +20,10 @@ import com.example.gptest.R
 import com.example.gptest.business.QuoteParser
 import com.example.gptest.business.QuoteSortMode
 import com.example.gptest.business.TradingSession
-import com.example.gptest.data.AlertStore
-import com.example.gptest.data.AppDatabase
-import com.example.gptest.data.QuoteRepository
-import com.example.gptest.data.SortPreferences
-import com.example.gptest.data.WatchlistStore
 import com.example.gptest.databinding.ActivityMainBinding
 import com.example.gptest.ui.alert.AlertNotificationPermission
 import com.example.gptest.ui.alert.AlertRulesActivity
 import com.example.gptest.ui.alert.AlertWatchlistExtras
-import com.example.gptest.ui.alert.AndroidAlertNotifier
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 import java.util.Collections
@@ -40,13 +34,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var quoteAdapter: QuoteListAdapter
 
     private val viewModel: MainViewModel by viewModels {
-        val database = AppDatabase.get(this)
         MainViewModelFactory(
-            QuoteRepository(),
-            WatchlistStore(database.watchlistDao()),
-            SortPreferences(this),
-            AlertStore(database.alertDao()),
-            AndroidAlertNotifier(this)
+            QuoteMonitorHolder.get(this),
+            AndroidMonitorServiceGateway(this)
         )
     }
 

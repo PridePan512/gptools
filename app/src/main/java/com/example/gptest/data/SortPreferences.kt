@@ -25,10 +25,17 @@ class SortPreferences(context: Context) : SortModeStore {
             prefs.edit().putLong(KEY_INTERVAL_SECONDS, seconds).apply()
         }
 
+    override var monitorRunning: Boolean
+        get() = prefs.getBoolean(KEY_MONITOR_RUNNING, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_MONITOR_RUNNING, value).commit()
+        }
+
     companion object {
         private const val PREFS_NAME = "gptest_prefs"
         private const val KEY_MODE = "quote_sort_mode"
         private const val KEY_INTERVAL_SECONDS = "quote_interval_seconds"
+        private const val KEY_MONITOR_RUNNING = "quote_monitor_running"
         private const val DEFAULT_INTERVAL_SECONDS = 5L
     }
 }

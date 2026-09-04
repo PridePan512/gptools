@@ -21,6 +21,10 @@
     <string name="stop">停止</string>
     <string name="status_idle">未开始</string>
     <string name="status_running">检测中</string>
+    <string name="monitor_channel_name">盯盘检测</string>
+    <string name="monitor_channel_desc">后台定时拉取行情并检查监控规则</string>
+    <string name="monitor_notification_title">盯盘检测中</string>
+    <string name="monitor_notification_text">间隔 %1$d 秒，监控规则会在后台触发</string>
     <string name="status_stopped">已停止</string>
     <string name="status_preopen_once">未开盘，已更新一次，未启动定时刷新</string>
     <string name="status_lunch_once">午休中，已更新一次，未启动定时刷新</string>

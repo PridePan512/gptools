@@ -5,4 +5,5 @@ import com.example.gptest.business.QuoteSortMode
 interface SortModeStore {
     var mode: QuoteSortMode
     var intervalSeconds: Long
+    var monitorRunning: Boolean
 }

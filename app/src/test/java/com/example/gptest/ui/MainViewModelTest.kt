@@ -312,13 +312,60 @@ class MainViewModelTest {
         assertEquals("12.00", vm.uiState.value.rows[1].price)
     }
 
+    @Test
+    fun startPolling_withWatchlist_startsMonitorService() = runTest(dispatcher) {
+        val gateway = RecordingGateway()
+        val vm = viewModel(
+            quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50")))),
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            clock = closedClock(),
+            serviceGateway = gateway
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        assertEquals(1, gateway.starts)
+        assertTrue(vm.uiState.value.isRunning)
+        vm.stopPolling()
+        assertEquals(1, gateway.stops)
+        assertFalse(vm.uiState.value.isRunning)
+    }
+
+    @Test
+    fun startPolling_emptyWatchlist_doesNotStartMonitorService() = runTest(dispatcher) {
+        val gateway = RecordingGateway()
+        val vm = viewModel(serviceGateway = gateway)
+        advanceUntilIdle()
+        vm.startPolling("5")
+        advanceUntilIdle()
+        assertEquals(0, gateway.starts)
+        assertEquals(0, gateway.stops)
+    }
+
+    @Test
+    fun closedSession_clearsMonitorRunningFlag() = runTest(dispatcher) {
+        val store = FakeSortStore()
+        val vm = viewModel(
+            quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50")))),
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            sortStore = store,
+            clock = closedClock()
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        assertTrue(store.monitorRunning)
+        advanceUntilIdle()
+        assertFalse(store.monitorRunning)
+        assertFalse(vm.uiState.value.isRunning)
+    }
+
     private fun viewModel(
         quotes: QuoteDataSource = FakeQuotes(Result.success(emptyList())),
         watchlist: WatchlistDataSource = FakeWatchlist(),
         sortStore: SortModeStore = FakeSortStore(),
         clock: Clock = closedClock(),
         alerts: AlertDataSource = NoOpAlertDataSource,
-        notifier: AlertNotifier = NoOpAlertNotifier
+        notifier: AlertNotifier = NoOpAlertNotifier,
+        serviceGateway: MonitorServiceGateway = NoOpMonitorServiceGateway
     ): MainViewModel {
         return MainViewModel(
             quotes,
@@ -327,7 +374,8 @@ class MainViewModelTest {
             clock,
             dispatcher,
             alerts,
-            notifier
+            notifier,
+            serviceGateway
         )
     }
 
@@ -366,8 +414,20 @@ class MainViewModelTest {
 
     private class FakeSortStore(
         override var mode: QuoteSortMode = QuoteSortMode.CUSTOM,
-        override var intervalSeconds: Long = 5L
+        override var intervalSeconds: Long = 5L,
+        override var monitorRunning: Boolean = false
     ) : SortModeStore
+
+    private class RecordingGateway : MonitorServiceGateway {
+        var starts = 0
+        var stops = 0
+        override fun start() {
+            starts += 1
+        }
+        override fun stop() {
+            stops += 1
+        }
+    }
 
     private class FakeAlerts(
         private val rules: MutableList<AlertRule>
