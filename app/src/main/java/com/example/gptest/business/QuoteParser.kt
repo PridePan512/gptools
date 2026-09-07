@@ -5,7 +5,8 @@ data class QuoteSnapshot(
     val name: String,
     val price: String,
     val changePercent: String,
-    val fields: List<String>
+    val fields: List<String>,
+    val fetchedAtMs: Long = 0L
 )
 
 object QuoteParser {

@@ -42,6 +42,7 @@ class QuoteMonitor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val watchlist = mutableListOf<String>()
     private var quotes: List<QuoteSnapshot> = emptyList()
+    private var previousQuotes: List<QuoteSnapshot> = emptyList()
     private var selectedCode: String? = null
     private var sortMode: QuoteSortMode = sortModeStore.mode
     private var rawExpanded = false
@@ -215,15 +216,19 @@ class QuoteMonitor(
         val keepErrorStatus = result.isFailure
         result.fold(
             onSuccess = { latest ->
+                val older = previousQuotes
                 val previous = quotes
-                shanghaiIndex = latest.find { it.requestCode == QuoteParser.SHANGHAI_INDEX_CODE } ?: shanghaiIndex
-                quotes = latest.filter {
+                val fetchedAtMs = clock.millis()
+                val stamped = latest.map { it.copy(fetchedAtMs = fetchedAtMs) }
+                shanghaiIndex = stamped.find { it.requestCode == QuoteParser.SHANGHAI_INDEX_CODE } ?: shanghaiIndex
+                quotes = stamped.filter {
                     it.requestCode != QuoteParser.SHANGHAI_INDEX_CODE ||
                         watchlist.contains(QuoteParser.SHANGHAI_INDEX_CODE)
                 }
-                lastUpdatedMs = clock.millis()
+                previousQuotes = previous
+                lastUpdatedMs = fetchedAtMs
                 publish()
-                evaluateAlerts(previous, quotes)
+                evaluateAlerts(previous, quotes, older)
             },
             onFailure = { error ->
                 status = if (error is IllegalStateException) {
@@ -265,12 +270,20 @@ class QuoteMonitor(
 
     private suspend fun evaluateAlerts(
         previous: List<QuoteSnapshot>,
-        current: List<QuoteSnapshot>
+        current: List<QuoteSnapshot>,
+        older: List<QuoteSnapshot>
     ) {
         val fires = withContext(ioDispatcher) {
             val rules = alertDataSource.loadRules()
             if (rules.isEmpty()) return@withContext emptyList()
-            val result = AlertEvaluator.evaluate(rules, current, previous, clock.millis())
+            val result = AlertEvaluator.evaluate(
+                rules,
+                current,
+                previous,
+                clock.millis(),
+                older,
+                intervalSeconds
+            )
             alertDataSource.replaceRules(result.updatedRules)
             result.fires
         }

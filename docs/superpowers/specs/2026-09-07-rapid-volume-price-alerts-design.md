@@ -38,7 +38,11 @@
 - 快速拉升：本口现价相对上一口涨幅 ≥ **1%**
 - 快速下跌：本口现价相对上一口跌幅 ≥ **1%**
 
-涨跌幅按上一口现价计算：`(current - previous) / previous`。
+涨跌幅按上一口现价计算，并按**实际间隔 / 设定检测间隔**折算：设定 5 秒且准时拉取时，仍是 1%；实际隔了 10 秒（仍在设定间隔的 0.5～2 倍内）则要 2%。实际间隔超出设定值的 0.5～2 倍（午休后第一口、漏拉）不判快速。
+
+放量/缩量把两段增量都除以各自实际毫秒，再比 2 倍 / 0.5 倍。两段窗口都要落在设定间隔的 0.5～2 倍内，且两段时长之比也在 0.5～2 倍内，否则不触发。
+
+每次拉取给 `QuoteSnapshot.fetchedAtMs` 打上时间，求值时传入当前 `intervalSeconds`。
 
 ## 行情窗口
 
@@ -64,8 +68,8 @@
 **拉升 / 下跌**
 
 - 缺当前或上一口、上一口现价 ≤ 0：不满足
-- 拉升：`(currentPrice - previousPrice) / previousPrice >= 0.01`
-- 下跌：`(previousPrice - currentPrice) / previousPrice >= 0.01`
+- 拉升：实际涨幅 ≥ `1% × (实际间隔 / 设定间隔)`，且实际间隔在设定值的 0.5～2 倍内
+- 下跌：实际跌幅 ≥ 同上阈值，窗口限制相同
 
 **放量 / 缩量**
 
@@ -73,8 +77,9 @@
 - `prevDelta = previousVol - olderVol`，`currDelta = currentVol - previousVol`
 - `prevDelta <= 0` 或不满足：不触发（避免开盘第一段从 0 变成任意量被当成放量）
 - `currDelta < 0`：不满足
-- 放量：`currDelta >= prevDelta * 2`
-- 缩量：`currDelta <= prevDelta * 0.5`
+- 两段窗口时长均须在设定间隔的 0.5～2 倍内，且两段时长之比也在 0.5～2 倍内
+- 放量：`currDelta/currMs >= (prevDelta/prevMs) * 2`
+- 缩量：`currDelta/currMs <= (prevDelta/prevMs) * 0.5`
 
 现有 `needsValue == false` 的涨跌停逻辑保持不变；新比较符走量价窗口分支，不走涨跌停。
 

@@ -198,6 +198,180 @@ class AlertEvaluatorTest {
     fun boardSentence_omitsThreshold() {
         assertEquals("通鼎互联  撬开涨停", board(AlertOperator.OPEN_LIMIT_UP).sentence())
         assertEquals("通鼎互联  跌停", board(AlertOperator.LIMIT_DOWN).sentence())
+        assertEquals("通鼎互联  快速放量", board(AlertOperator.VOLUME_SURGE).sentence())
+        assertEquals("通鼎互联  快速下跌", board(AlertOperator.PRICE_DROP).sentence())
+    }
+
+    @Test
+    fun priceSurge_needsOnePercentUp() {
+        val condition = board(AlertOperator.PRICE_SURGE)
+        val previous = mapOf(tongding.code to quote(tongding.code, price = "10.00", fetchedAtMs = 5_000L))
+        assertTrue(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "10.10", fetchedAtMs = 10_000L)),
+                previous
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "10.09", fetchedAtMs = 10_000L)),
+                previous
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "10.10", fetchedAtMs = 10_000L)),
+                emptyMap()
+            )
+        )
+    }
+
+    @Test
+    fun priceSurge_scalesThresholdWithElapsedTime() {
+        val condition = board(AlertOperator.PRICE_SURGE)
+        val previous = mapOf(tongding.code to quote(tongding.code, price = "10.00", fetchedAtMs = 5_000L))
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "10.10", fetchedAtMs = 15_000L)),
+                previous,
+                intervalSeconds = 5L
+            )
+        )
+        assertTrue(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "10.20", fetchedAtMs = 15_000L)),
+                previous,
+                intervalSeconds = 5L
+            )
+        )
+    }
+
+    @Test
+    fun priceSurge_skipsWhenElapsedFarFromInterval() {
+        val condition = board(AlertOperator.PRICE_SURGE)
+        val previous = mapOf(tongding.code to quote(tongding.code, price = "10.00", fetchedAtMs = 5_000L))
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "12.00", fetchedAtMs = 35_000L)),
+                previous,
+                intervalSeconds = 5L
+            )
+        )
+    }
+
+    @Test
+    fun priceDrop_needsOnePercentDown() {
+        val condition = board(AlertOperator.PRICE_DROP)
+        val previous = mapOf(tongding.code to quote(tongding.code, price = "10.00", fetchedAtMs = 5_000L))
+        assertTrue(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "9.90", fetchedAtMs = 10_000L)),
+                previous
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, price = "9.91", fetchedAtMs = 10_000L)),
+                previous
+            )
+        )
+    }
+
+    @Test
+    fun volumeSurge_needsDoubleIntervalVolume() {
+        val condition = board(AlertOperator.VOLUME_SURGE)
+        val older = mapOf(tongding.code to quote(tongding.code, volume = "100", fetchedAtMs = 5_000L))
+        val previous = mapOf(tongding.code to quote(tongding.code, volume = "200", fetchedAtMs = 10_000L))
+        assertTrue(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, volume = "400", fetchedAtMs = 15_000L)),
+                previous,
+                older
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, volume = "350", fetchedAtMs = 15_000L)),
+                previous,
+                older
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, volume = "400", fetchedAtMs = 15_000L)),
+                previous
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, volume = "200", fetchedAtMs = 15_000L)),
+                mapOf(tongding.code to quote(tongding.code, volume = "100", fetchedAtMs = 10_000L)),
+                older
+            )
+        )
+    }
+
+    @Test
+    fun volumeSurge_usesPerSecondRateNotRawDelta() {
+        val condition = board(AlertOperator.VOLUME_SURGE)
+        val older = mapOf(tongding.code to quote(tongding.code, volume = "100", fetchedAtMs = 5_000L))
+        val previous = mapOf(tongding.code to quote(tongding.code, volume = "200", fetchedAtMs = 10_000L))
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, volume = "400", fetchedAtMs = 20_000L)),
+                previous,
+                older,
+                intervalSeconds = 5L
+            )
+        )
+    }
+
+    @Test
+    fun volumeShrink_needsHalfIntervalVolume() {
+        val condition = board(AlertOperator.VOLUME_SHRINK)
+        val older = mapOf(tongding.code to quote(tongding.code, volume = "100", fetchedAtMs = 5_000L))
+        val previous = mapOf(tongding.code to quote(tongding.code, volume = "300", fetchedAtMs = 10_000L))
+        assertTrue(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, volume = "400", fetchedAtMs = 15_000L)),
+                previous,
+                older
+            )
+        )
+        assertFalse(
+            AlertEvaluator.isSatisfied(
+                condition,
+                mapOf(tongding.code to quote(tongding.code, volume = "500", fetchedAtMs = 15_000L)),
+                previous,
+                older
+            )
+        )
+    }
+
+    @Test
+    fun volumeSurge_evaluateDetailIncludesDeltas() {
+        val rule = rule(conditions = listOf(board(AlertOperator.VOLUME_SURGE)))
+        val older = listOf(quote(tongding.code, volume = "100", fetchedAtMs = 5_000L))
+        val previous = listOf(quote(tongding.code, volume = "200", fetchedAtMs = 10_000L))
+        val current = listOf(quote(tongding.code, volume = "400", fetchedAtMs = 15_000L))
+        val result = AlertEvaluator.evaluate(listOf(rule), current, previous, nowMs = 15_000L, older = older)
+        assertEquals(1, result.fires.size)
+        assertTrue(result.fires.single().detail.contains("本口 200 手"))
+        assertTrue(result.fires.single().detail.contains("上一口 100 手"))
     }
 
     private fun priceAbove(threshold: Double): AlertCondition {
@@ -244,18 +418,21 @@ class AlertEvaluatorTest {
         code: String,
         price: String = "10",
         change: String = "0",
+        volume: String = "0",
         limitUp: String = "",
-        limitDown: String = ""
+        limitDown: String = "",
+        fetchedAtMs: Long = 0L
     ): QuoteSnapshot {
         val fields = MutableList(50) { "" }
         fields[2] = code.takeLast(6)
         fields[3] = price
+        fields[6] = volume
         fields[32] = change
         fields[37] = "100"
         fields[38] = "1"
         fields[43] = "2"
         fields[47] = limitUp
         fields[48] = limitDown
-        return QuoteSnapshot(code, code, price, change, fields)
+        return QuoteSnapshot(code, code, price, change, fields, fetchedAtMs)
     }
 }

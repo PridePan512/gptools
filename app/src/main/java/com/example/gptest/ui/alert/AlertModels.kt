@@ -19,7 +19,11 @@ enum class AlertOperator(val label: String, val needsValue: Boolean = true) {
     LIMIT_UP("涨停", needsValue = false),
     LIMIT_DOWN("跌停", needsValue = false),
     OPEN_LIMIT_UP("撬开涨停", needsValue = false),
-    OPEN_LIMIT_DOWN("撬开跌停", needsValue = false)
+    OPEN_LIMIT_DOWN("撬开跌停", needsValue = false),
+    VOLUME_SURGE("快速放量", needsValue = false),
+    VOLUME_SHRINK("快速缩量", needsValue = false),
+    PRICE_SURGE("快速拉升", needsValue = false),
+    PRICE_DROP("快速下跌", needsValue = false)
 }
 
 enum class AlertMatchMode(val label: String, val joiner: String) {
