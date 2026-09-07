@@ -37,9 +37,9 @@ class QuoteDiffCallbackTest {
     }
 
     @Test
-    fun selectionChange_dispatchesChanged() {
-        val old = listOf(row(selected = true), row(code = "sz000002", selected = false))
-        val new = listOf(row(selected = false), row(code = "sz000002", selected = true))
+    fun dragEnabledChange_dispatchesChanged() {
+        val old = listOf(row(dragEnabled = true), row(code = "sz000002", dragEnabled = true))
+        val new = listOf(row(dragEnabled = false), row(code = "sz000002", dragEnabled = false))
         val recorder = Recorder()
         DiffUtil.calculateDiff(QuoteDiffCallback(old, new), true).dispatchUpdatesTo(recorder)
         assertEquals(2, recorder.changed)
@@ -81,7 +81,6 @@ class QuoteDiffCallbackTest {
         change: String = "1.00",
         changeAmount: String = "0.10",
         time: String = "10:00:00",
-        selected: Boolean = false,
         dragEnabled: Boolean = false,
         limitUp: String = "",
         limitDown: String = ""
@@ -97,7 +96,6 @@ class QuoteDiffCallbackTest {
         fields[48] = limitDown
         return QuoteRow(
             quote = QuoteSnapshot(code, name, price, change, fields),
-            selected = selected,
             dragEnabled = dragEnabled
         )
     }

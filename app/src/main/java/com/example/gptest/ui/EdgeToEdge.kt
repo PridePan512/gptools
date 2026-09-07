@@ -34,11 +34,13 @@ fun applyEdgeToEdgeInsets(
             top = systemBars.top,
             right = systemBars.right
         )
-        content.updatePadding(
-            left = systemBars.left,
-            right = systemBars.right,
-            bottom = contentBottom + bottom
-        )
+        if (systemBars.left != 0 || systemBars.right != 0) {
+            content.updatePadding(
+                left = systemBars.left,
+                right = systemBars.right,
+                bottom = contentBottom + bottom
+            )
+        }
         fab?.updateLayoutParams<MarginLayoutParams> {
             bottomMargin = fabBottom + systemBars.bottom
             marginEnd = fabEnd + systemBars.right

@@ -14,7 +14,6 @@ import com.example.gptest.business.QuoteSnapshot
 
 data class QuoteRow(
     val quote: QuoteSnapshot,
-    val selected: Boolean,
     val dragEnabled: Boolean
 ) {
     fun sameIdentity(other: QuoteRow): Boolean {
@@ -23,7 +22,6 @@ data class QuoteRow(
 
     fun sameVisible(other: QuoteRow): Boolean {
         return sameIdentity(other) &&
-            selected == other.selected &&
             dragEnabled == other.dragEnabled &&
             quote.name == other.quote.name &&
             quote.price == other.quote.price &&
@@ -67,30 +65,25 @@ class QuoteListAdapter(
 ) : RecyclerView.Adapter<QuoteListAdapter.ViewHolder>() {
 
     val items = mutableListOf<QuoteRow>()
-    var selectedCode: String? = null
-        private set
     var dragEnabled: Boolean = false
         private set
 
-    fun submit(rows: List<QuoteSnapshot>, selected: String?, dragEnabled: Boolean) {
+    fun submit(rows: List<QuoteSnapshot>, dragEnabled: Boolean) {
         val newItems = rows.map { quote ->
             QuoteRow(
                 quote = quote,
-                selected = quote.requestCode == selected,
                 dragEnabled = dragEnabled
             )
         }
         if (items.size == newItems.size && items.indices.all { items[it].sameVisible(newItems[it]) }) {
             items.clear()
             items.addAll(newItems)
-            selectedCode = selected
             this.dragEnabled = dragEnabled
             return
         }
         val diff = DiffUtil.calculateDiff(QuoteDiffCallback(items.toList(), newItems), true)
         items.clear()
         items.addAll(newItems)
-        selectedCode = selected
         this.dragEnabled = dragEnabled
         diff.dispatchUpdatesTo(this)
     }
@@ -157,9 +150,7 @@ class QuoteListAdapter(
                 LimitBoard.NONE -> null
             }
             tvName.setTextColor(boardColor ?: defaultNameColor)
-            content.setBackgroundResource(
-                if (row.selected) R.drawable.bg_quote_row_selected else R.drawable.bg_quote_row
-            )
+            content.setBackgroundResource(R.drawable.bg_quote_row)
         }
 
         fun resetSwipe() {

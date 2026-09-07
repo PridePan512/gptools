@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private var settingsDialog: AlertDialog? = null
     private var settingsIntervalInput: TextInputEditText? = null
     private var watchlistMenuReady = false
+    private var detailSheet: QuoteDetailSheet? = null
 
     private val lastUpdatedFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
         .withZone(TradingSession.SHANGHAI)
@@ -66,7 +67,6 @@ class MainActivity : AppCompatActivity() {
         setupQuoteList()
         binding.btnSort.setOnClickListener { showSortMenu() }
         binding.fabMonitor.setOnClickListener { toggleMonitor() }
-        binding.quoteCard.tvToggleRaw.setOnClickListener { viewModel.toggleRaw() }
         observeViewModel()
     }
 
@@ -135,8 +135,8 @@ class MainActivity : AppCompatActivity() {
         bindStatus(state.status)
         bindLastUpdated(state.lastUpdatedMs)
         bindShanghaiIndex(state.shanghaiIndex)
-        quoteAdapter.submit(state.rows, state.selectedCode, state.dragEnabled)
-        bindSelectedCard(state)
+        quoteAdapter.submit(state.rows, state.dragEnabled)
+        detailSheet?.bind(state)
     }
 
     private fun bindFab(running: Boolean) {
@@ -188,6 +188,11 @@ class MainActivity : AppCompatActivity() {
         binding.tvIndexChange.text = change
         applyChangeColor(binding.tvIndexPrice, quote?.changePercent.orEmpty())
         applyChangeColor(binding.tvIndexChange, quote?.changePercent.orEmpty())
+    }
+
+    private fun openQuoteDetail(code: String) {
+        val sheet = detailSheet ?: QuoteDetailSheet(this) { detailSheet = null }.also { detailSheet = it }
+        sheet.show(code)
     }
 
     private fun toggleMonitor() {
@@ -306,17 +311,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupQuoteList() {
         quoteAdapter = QuoteListAdapter(
-            onClick = { quote -> viewModel.select(quote.requestCode) },
+            onClick = { quote -> openQuoteDetail(quote.requestCode) },
             onDelete = { code -> viewModel.removeCode(code) },
             onStartDrag = { holder ->
-                binding.rvQuoteList.parent?.requestDisallowInterceptTouchEvent(true)
                 itemTouchHelper.startDrag(holder)
             },
             applyChangeColor = { view, change -> applyChangeColor(view, change) }
         )
         binding.rvQuoteList.layoutManager = LinearLayoutManager(this)
         binding.rvQuoteList.adapter = quoteAdapter
-        binding.rvQuoteList.isNestedScrollingEnabled = false
         itemTouchHelper.attachToRecyclerView(binding.rvQuoteList)
     }
 
@@ -399,54 +402,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun bindSelectedCard(state: MainUiState) {
-        val card = binding.quoteCard
-        val data = state.selectedCard
-        if (data == null) {
-            card.tvCardPlaceholder.visibility = View.VISIBLE
-            card.llCardContent.visibility = View.GONE
-            return
-        }
-        card.tvCardPlaceholder.visibility = View.GONE
-        card.llCardContent.visibility = View.VISIBLE
-        card.tvCardName.text = data.name
-        card.tvCardCode.text = data.code
-        card.tvCardPrice.text = data.price
-        card.tvCardChangePercent.text = data.changePercent
-        card.tvCardChange.text = data.change
-        applyChangeColor(card.tvCardPrice, data.changePercent)
-        applyChangeColor(card.tvCardChangePercent, data.changePercent)
-        applyChangeColor(card.tvCardChange, data.changePercent)
-        card.tvOpen.text = data.open
-        card.tvPrevClose.text = data.prevClose
-        card.tvHigh.text = data.high
-        card.tvLow.text = data.low
-        card.tvVolume.text = data.volume
-        card.tvAmount.text = data.amount
-        card.tvTurnover.text = data.turnover
-        card.tvAmplitude.text = data.amplitude
-        card.tvPe.text = data.pe
-        card.tvPb.text = data.pb
-        card.tvBids.text = data.bids.mapIndexed { index, level ->
-            getString(R.string.level_bid, index + 1, level.price, level.volume)
-        }.joinToString("\n")
-        card.tvAsks.text = data.asks.mapIndexed { index, level ->
-            getString(R.string.level_ask, index + 1, level.price, level.volume)
-        }.joinToString("\n")
-        card.tvRawDetail.text = data.rawDetail
-        card.tvRawDetail.visibility = if (state.rawExpanded) View.VISIBLE else View.GONE
-        card.tvToggleRaw.setText(
-            if (state.rawExpanded) R.string.hide_raw_fields else R.string.show_raw_fields
-        )
-    }
-
     private fun applyChangeColor(view: TextView, changePercent: String) {
-        val changeValue = QuoteParser.changePercentValue(changePercent)
-        val changeColor = when {
-            changeValue == null || changeValue == 0.0 -> R.color.quote_flat
-            changeValue > 0 -> R.color.quote_up
-            else -> R.color.quote_down
-        }
-        view.setTextColor(getColor(changeColor))
+        QuoteCardBinder.applyChangeColor(this, view, changePercent)
     }
 }

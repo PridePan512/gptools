@@ -44,6 +44,7 @@
     <string name="status_invalid_response">无法解析行情</string>
     <string name="quote_detail_label">行情详情</string>
     <string name="quote_detail_placeholder">点选一只股票查看详情</string>
+    <string name="quote_detail_missing">该股票已不在自选中</string>
     <string name="metric_open">今开</string>
     <string name="metric_prev_close">昨收</string>
     <string name="metric_high">最高</string>

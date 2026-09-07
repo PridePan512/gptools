@@ -315,9 +315,6 @@ class QuoteMonitor(
         if (selectedCode != null && rows.none { it.requestCode == selectedCode }) {
             selectedCode = null
         }
-        if (selectedCode == null && quotes.isNotEmpty()) {
-            selectedCode = quotes.first().requestCode
-        }
         val selected = selectedCode
         val quote = quotes.find { it.requestCode == selected }
         return MainUiState(
