@@ -14,6 +14,7 @@ import com.example.gptest.data.WatchlistDataSource
 import com.example.gptest.ui.alert.AlertEvaluator
 import com.example.gptest.ui.alert.AlertNotifier
 import com.example.gptest.ui.alert.NoOpAlertNotifier
+import com.example.gptest.ui.alert.RapidAlertThresholds
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,7 @@ class QuoteMonitor(
     private var status: QuoteStatus = QuoteStatus.Idle
     private var intervalSeconds = sortModeStore.intervalSeconds.let { if (it < 1L) 5L else it }
     private var intervalMs = intervalSeconds * 1000L
+    private var rapidThresholds = sortModeStore.rapidAlertThresholds
     private var pollJob: Job? = null
     private var pendingUndo: PendingUndo? = null
     private var lastUpdatedMs: Long? = null
@@ -173,6 +175,17 @@ class QuoteMonitor(
         publish()
     }
 
+    fun saveRapidThresholds(
+        volumeSurge: String,
+        volumeShrink: String,
+        priceSurge: String,
+        priceDrop: String
+    ) {
+        rapidThresholds = RapidAlertThresholds.parse(volumeSurge, volumeShrink, priceSurge, priceDrop)
+        sortModeStore.rapidAlertThresholds = rapidThresholds
+        publish()
+    }
+
     fun startPolling(intervalText: String) {
         saveInterval(intervalText)
         if (watchlist.isEmpty()) {
@@ -282,7 +295,8 @@ class QuoteMonitor(
                 previous,
                 clock.millis(),
                 older,
-                intervalSeconds
+                intervalSeconds,
+                rapidThresholds
             )
             alertDataSource.replaceRules(result.updatedRules)
             result.fires
@@ -327,6 +341,7 @@ class QuoteMonitor(
             isRunning = isRunning,
             watchlistLoaded = watchlistLoaded,
             intervalSeconds = intervalSeconds,
+            rapidAlertThresholds = rapidThresholds,
             lastUpdatedMs = lastUpdatedMs,
             shanghaiIndex = shanghaiIndex,
             status = status

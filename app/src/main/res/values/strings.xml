@@ -5,6 +5,10 @@
     <string name="add_stock">添加自选</string>
     <string name="settings">设置</string>
     <string name="interval_hint">检测间隔（秒）</string>
+    <string name="rapid_volume_surge_hint">快速放量（%）</string>
+    <string name="rapid_volume_shrink_hint">快速缩量（%）</string>
+    <string name="rapid_price_surge_hint">快速拉升（%）</string>
+    <string name="rapid_price_drop_hint">快速下跌（%）</string>
     <string name="interval_default">5</string>
     <string name="quote_list_label">行情列表</string>
     <string name="quote_last_updated">最近更新 %1$s</string>

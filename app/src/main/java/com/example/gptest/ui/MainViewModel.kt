@@ -54,6 +54,12 @@ class MainViewModel(
     fun setSortMode(mode: QuoteSortMode) = monitor.setSortMode(mode)
     fun toggleRaw() = monitor.toggleRaw()
     fun saveInterval(intervalText: String) = monitor.saveInterval(intervalText)
+    fun saveRapidThresholds(
+        volumeSurge: String,
+        volumeShrink: String,
+        priceSurge: String,
+        priceDrop: String
+    ) = monitor.saveRapidThresholds(volumeSurge, volumeShrink, priceSurge, priceDrop)
 
     fun startPolling(intervalText: String) {
         monitor.startPolling(intervalText)

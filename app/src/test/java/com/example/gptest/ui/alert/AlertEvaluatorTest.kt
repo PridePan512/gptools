@@ -374,6 +374,29 @@ class AlertEvaluatorTest {
         assertTrue(result.fires.single().detail.contains("上一口 100 手"))
     }
 
+    @Test
+    fun priceSurge_usesConfiguredPercent() {
+        val condition = board(AlertOperator.PRICE_SURGE)
+        val previous = mapOf(tongding.code to quote(tongding.code, price = "10.00", fetchedAtMs = 5_000L))
+        val current = mapOf(tongding.code to quote(tongding.code, price = "10.10", fetchedAtMs = 10_000L))
+        val tighter = RapidAlertThresholds(priceSurgePercent = 2.0)
+        assertFalse(AlertEvaluator.isSatisfied(condition, current, previous, thresholds = tighter))
+        val looser = RapidAlertThresholds(priceSurgePercent = 0.5)
+        assertTrue(AlertEvaluator.isSatisfied(condition, current, previous, thresholds = looser))
+    }
+
+    @Test
+    fun volumeSurge_usesConfiguredPercent() {
+        val condition = board(AlertOperator.VOLUME_SURGE)
+        val older = mapOf(tongding.code to quote(tongding.code, volume = "100", fetchedAtMs = 5_000L))
+        val previous = mapOf(tongding.code to quote(tongding.code, volume = "200", fetchedAtMs = 10_000L))
+        val current = mapOf(tongding.code to quote(tongding.code, volume = "400", fetchedAtMs = 15_000L))
+        val tighter = RapidAlertThresholds(volumeSurgePercent = 300.0)
+        assertFalse(AlertEvaluator.isSatisfied(condition, current, previous, older, thresholds = tighter))
+        val looser = RapidAlertThresholds(volumeSurgePercent = 150.0)
+        assertTrue(AlertEvaluator.isSatisfied(condition, current, previous, older, thresholds = looser))
+    }
+
     private fun priceAbove(threshold: Double): AlertCondition {
         return AlertCondition(
             id = "c1",

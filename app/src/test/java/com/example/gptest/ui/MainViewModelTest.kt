@@ -19,6 +19,7 @@ import com.example.gptest.ui.alert.AlertRule
 import com.example.gptest.ui.alert.AlertRuleStatus
 import com.example.gptest.ui.alert.AlertStockOption
 import com.example.gptest.ui.alert.NoOpAlertNotifier
+import com.example.gptest.ui.alert.RapidAlertThresholds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -268,6 +269,36 @@ class MainViewModelTest {
     }
 
     @Test
+    fun saveRapidThresholds_persistsPercents() = runTest(dispatcher) {
+        val store = FakeSortStore()
+        val vm = viewModel(sortStore = store)
+        advanceUntilIdle()
+        vm.saveRapidThresholds("150", "40", "0.8", "2")
+        advanceUntilIdle()
+        assertEquals(150.0, store.rapidAlertThresholds.volumeSurgePercent, 0.0)
+        assertEquals(40.0, store.rapidAlertThresholds.volumeShrinkPercent, 0.0)
+        assertEquals(0.8, vm.uiState.value.rapidAlertThresholds.priceSurgePercent, 0.0)
+        assertEquals(2.0, vm.uiState.value.rapidAlertThresholds.priceDropPercent, 0.0)
+    }
+
+    @Test
+    fun saveRapidThresholds_worksWhileRunning() = runTest(dispatcher) {
+        val store = FakeSortStore(intervalSeconds = 5)
+        val vm = viewModel(
+            quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50")))),
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            sortStore = store,
+            clock = closedClock()
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        assertTrue(vm.uiState.value.isRunning)
+        vm.saveRapidThresholds("300", "50", "1", "1")
+        assertEquals(300.0, store.rapidAlertThresholds.volumeSurgePercent, 0.0)
+        assertTrue(vm.uiState.value.isRunning)
+    }
+
+    @Test
     fun startPolling_usesSavedIntervalFromUiState() = runTest(dispatcher) {
         val store = FakeSortStore(intervalSeconds = 5)
         val vm = viewModel(
@@ -488,7 +519,8 @@ class MainViewModelTest {
     private class FakeSortStore(
         override var mode: QuoteSortMode = QuoteSortMode.CUSTOM,
         override var intervalSeconds: Long = 5L,
-        override var monitorRunning: Boolean = false
+        override var monitorRunning: Boolean = false,
+        override var rapidAlertThresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT
     ) : SortModeStore
 
     private class RecordingGateway : MonitorServiceGateway {

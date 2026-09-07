@@ -4,6 +4,7 @@ import com.example.gptest.business.QuoteCard
 import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.business.QuoteSortMode
 import com.example.gptest.business.TradingSession
+import com.example.gptest.ui.alert.RapidAlertThresholds
 
 sealed interface QuoteStatus {
     data object Idle : QuoteStatus
@@ -35,6 +36,7 @@ data class MainUiState(
     val isRunning: Boolean = false,
     val watchlistLoaded: Boolean = false,
     val intervalSeconds: Long = 5L,
+    val rapidAlertThresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT,
     val lastUpdatedMs: Long? = null,
     val shanghaiIndex: QuoteSnapshot? = null,
     val status: QuoteStatus = QuoteStatus.Idle

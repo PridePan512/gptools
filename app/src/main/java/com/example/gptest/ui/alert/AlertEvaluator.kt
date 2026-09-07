@@ -23,10 +23,7 @@ object AlertEvaluator {
     private const val AMOUNT_INDEX = 37
     private const val TURNOVER_INDEX = 38
     private const val AMPLITUDE_INDEX = 43
-    private const val PRICE_MOVE_RATIO = 0.01
     private const val PRICE_MOVE_EPS = 1e-8
-    private const val VOLUME_SURGE_RATIO = 2.0
-    private const val VOLUME_SHRINK_RATIO = 0.5
     private const val WINDOW_MIN_RATIO = 0.5
     private const val WINDOW_MAX_RATIO = 2.0
 
@@ -36,7 +33,8 @@ object AlertEvaluator {
         previous: List<QuoteSnapshot>,
         nowMs: Long,
         older: List<QuoteSnapshot> = emptyList(),
-        intervalSeconds: Long = 5L
+        intervalSeconds: Long = 5L,
+        thresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT
     ): AlertTickResult {
         val currentByCode = current.associateBy { it.requestCode }
         val previousByCode = previous.associateBy { it.requestCode }
@@ -51,10 +49,10 @@ object AlertEvaluator {
             }
             val matched = when (rule.matchMode) {
                 AlertMatchMode.ALL -> rule.conditions.all {
-                    isSatisfied(it, currentByCode, previousByCode, olderByCode, intervalSeconds)
+                    isSatisfied(it, currentByCode, previousByCode, olderByCode, intervalSeconds, thresholds)
                 }
                 AlertMatchMode.ANY -> rule.conditions.any {
-                    isSatisfied(it, currentByCode, previousByCode, olderByCode, intervalSeconds)
+                    isSatisfied(it, currentByCode, previousByCode, olderByCode, intervalSeconds, thresholds)
                 }
             }
             val status = if (matched) AlertRuleStatus.FIRED else AlertRuleStatus.WAITING
@@ -93,7 +91,8 @@ object AlertEvaluator {
         currentByCode: Map<String, QuoteSnapshot>,
         previousByCode: Map<String, QuoteSnapshot>,
         olderByCode: Map<String, QuoteSnapshot> = emptyMap(),
-        intervalSeconds: Long = 5L
+        intervalSeconds: Long = 5L,
+        thresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT
     ): Boolean {
         val quote = currentByCode[condition.stock.code]
         if (!condition.operator.needsValue) {
@@ -106,7 +105,8 @@ object AlertEvaluator {
                     quote,
                     previousByCode[condition.stock.code],
                     olderByCode[condition.stock.code],
-                    intervalSeconds
+                    intervalSeconds,
+                    thresholds
                 )
                 else -> boardSatisfied(condition.operator, quote, previousByCode[condition.stock.code])
             }
@@ -206,7 +206,8 @@ object AlertEvaluator {
         current: QuoteSnapshot?,
         previous: QuoteSnapshot?,
         older: QuoteSnapshot?,
-        intervalSeconds: Long
+        intervalSeconds: Long,
+        thresholds: RapidAlertThresholds
     ): Boolean {
         return when (operator) {
             AlertOperator.PRICE_SURGE, AlertOperator.PRICE_DROP -> {
@@ -216,7 +217,12 @@ object AlertEvaluator {
                 val elapsedMs = elapsedMs(current, previous) ?: return false
                 if (!windowMatchesInterval(elapsedMs, intervalSeconds)) return false
                 val expectedMs = intervalSeconds * 1000.0
-                val threshold = PRICE_MOVE_RATIO * (elapsedMs / expectedMs)
+                val moveRatio = if (operator == AlertOperator.PRICE_SURGE) {
+                    thresholds.priceSurgeRatio
+                } else {
+                    thresholds.priceDropRatio
+                }
+                val threshold = moveRatio * (elapsedMs / expectedMs)
                 val change = (currentPrice - previousPrice) / previousPrice
                 if (operator == AlertOperator.PRICE_SURGE) {
                     change + PRICE_MOVE_EPS >= threshold
@@ -234,9 +240,9 @@ object AlertEvaluator {
                 val prevRate = deltas.previous / prevWindowMs
                 val currRate = deltas.current / currWindowMs
                 if (operator == AlertOperator.VOLUME_SURGE) {
-                    currRate >= prevRate * VOLUME_SURGE_RATIO
+                    currRate >= prevRate * thresholds.volumeSurgeRatio
                 } else {
-                    currRate <= prevRate * VOLUME_SHRINK_RATIO
+                    currRate <= prevRate * thresholds.volumeShrinkRatio
                 }
             }
             else -> false

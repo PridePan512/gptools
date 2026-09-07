@@ -35,6 +35,7 @@ import com.example.gptest.databinding.ActivityMainBinding
 import com.example.gptest.ui.alert.AlertNotificationPermission
 import com.example.gptest.ui.alert.AlertRulesActivity
 import com.example.gptest.ui.alert.AlertWatchlistExtras
+import com.example.gptest.ui.alert.RapidAlertThresholds
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
@@ -135,7 +136,6 @@ class MainActivity : AppCompatActivity() {
             invalidateOptionsMenu()
         }
         settingsIntervalInput?.isEnabled = !state.isRunning
-        settingsDialog?.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = !state.isRunning
         bindFab(state.isRunning)
         binding.root.keepScreenOn = state.isRunning
         binding.btnSort.setText(sortLabel(state.sortMode))
@@ -304,10 +304,20 @@ class MainActivity : AppCompatActivity() {
 
     private fun showSettingsDialog() {
         val view = layoutInflater.inflate(R.layout.dialog_settings, null)
-        val input = view.findViewById<TextInputEditText>(R.id.etSettingsInterval)
-        val running = viewModel.uiState.value.isRunning
-        input.setText(viewModel.uiState.value.intervalSeconds.toString())
-        input.isEnabled = !running
+        val intervalInput = view.findViewById<TextInputEditText>(R.id.etSettingsInterval)
+        val volumeSurgeInput = view.findViewById<TextInputEditText>(R.id.etVolumeSurge)
+        val volumeShrinkInput = view.findViewById<TextInputEditText>(R.id.etVolumeShrink)
+        val priceSurgeInput = view.findViewById<TextInputEditText>(R.id.etPriceSurge)
+        val priceDropInput = view.findViewById<TextInputEditText>(R.id.etPriceDrop)
+        val state = viewModel.uiState.value
+        val running = state.isRunning
+        val thresholds = state.rapidAlertThresholds
+        intervalInput.setText(state.intervalSeconds.toString())
+        intervalInput.isEnabled = !running
+        volumeSurgeInput.setText(RapidAlertThresholds.formatPercent(thresholds.volumeSurgePercent))
+        volumeShrinkInput.setText(RapidAlertThresholds.formatPercent(thresholds.volumeShrinkPercent))
+        priceSurgeInput.setText(RapidAlertThresholds.formatPercent(thresholds.priceSurgePercent))
+        priceDropInput.setText(RapidAlertThresholds.formatPercent(thresholds.priceDropPercent))
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.settings)
             .setView(view)
@@ -316,12 +326,18 @@ class MainActivity : AppCompatActivity() {
             .create()
         val save = {
             if (!viewModel.uiState.value.isRunning) {
-                viewModel.saveInterval(input.text?.toString().orEmpty())
+                viewModel.saveInterval(intervalInput.text?.toString().orEmpty())
             }
+            viewModel.saveRapidThresholds(
+                volumeSurgeInput.text?.toString().orEmpty(),
+                volumeShrinkInput.text?.toString().orEmpty(),
+                priceSurgeInput.text?.toString().orEmpty(),
+                priceDropInput.text?.toString().orEmpty()
+            )
             dialog.dismiss()
         }
-        input.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_DONE && input.isEnabled) {
+        priceDropInput.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
                 save()
                 true
             } else {
@@ -329,7 +345,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = !running
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { save() }
         }
         dialog.setOnDismissListener {
@@ -338,7 +353,7 @@ class MainActivity : AppCompatActivity() {
                 settingsIntervalInput = null
             }
         }
-        settingsIntervalInput = input
+        settingsIntervalInput = intervalInput
         settingsDialog = dialog
         dialog.show()
     }
