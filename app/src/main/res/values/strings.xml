@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">GPTest</string>
-    <string name="stock_code_hint">代码（个股/ETF）</string>
+    <string name="stock_code_hint">代码或名称</string>
     <string name="add">添加</string>
     <string name="add_stock">添加自选</string>
     <string name="settings">设置</string>
@@ -37,7 +37,8 @@
     <string name="status_closed_once">已收盘，已更新一次，未启动定时刷新</string>
     <string name="status_invalid_code">代码无效</string>
     <string name="status_duplicate_code">已在列表中</string>
-    <string name="status_empty_code">请输入股票代码</string>
+    <string name="status_empty_code">请输入代码或名称</string>
+    <string name="status_pick_suggestion">请从联想中选择</string>
     <string name="status_added">已添加 %1$s</string>
     <string name="status_empty_watchlist">请先添加至少一只股票</string>
     <string name="status_error">网络错误：%1$s</string>

@@ -23,15 +23,19 @@ fun applyEdgeToEdgeInsets(
     val fabMargin = fab?.layoutParams as? MarginLayoutParams
     val fabBottom = fabMargin?.bottomMargin ?: 0
     val fabEnd = fabMargin?.marginEnd ?: 0
+    val toolbarMargin = toolbar.layoutParams as? MarginLayoutParams
+    val toolbarTop = toolbarMargin?.topMargin ?: 0
     ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
         val systemBars = insets.getInsets(
             WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
         )
         val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
         val bottom = maxOf(systemBars.bottom, ime.bottom)
+        toolbar.updateLayoutParams<MarginLayoutParams> {
+            topMargin = toolbarTop + systemBars.top
+        }
         toolbar.updatePadding(
             left = systemBars.left,
-            top = systemBars.top,
             right = systemBars.right
         )
         if (systemBars.left != 0 || systemBars.right != 0) {

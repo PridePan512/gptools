@@ -6,7 +6,10 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.widget.ArrayAdapter
+import android.widget.ListView
 import android.widget.PopupMenu
 import android.widget.TextView
 import androidx.activity.viewModels
@@ -14,6 +17,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -24,6 +28,8 @@ import com.example.gptest.R
 import com.example.gptest.business.QuoteParser
 import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.business.QuoteSortMode
+import com.example.gptest.business.StockCatalog
+import com.example.gptest.business.StockCatalogEntry
 import com.example.gptest.business.TradingSession
 import com.example.gptest.databinding.ActivityMainBinding
 import com.example.gptest.ui.alert.AlertNotificationPermission
@@ -46,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     private var settingsIntervalInput: TextInputEditText? = null
     private var watchlistMenuReady = false
     private var detailSheet: QuoteDetailSheet? = null
+    private val stockCatalog by lazy { loadStockCatalog() }
 
     private val lastUpdatedFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
         .withZone(TradingSession.SHANGHAI)
@@ -216,16 +223,32 @@ class MainActivity : AppCompatActivity() {
     private fun showAddStockDialog() {
         val view = layoutInflater.inflate(R.layout.dialog_add_stock, null)
         val input = view.findViewById<TextInputEditText>(R.id.etAddStockCode)
-        val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.add_stock)
-            .setView(view)
-            .setPositiveButton(R.string.add, null)
-            .setNegativeButton(android.R.string.cancel, null)
-            .create()
+        val listView = view.findViewById<ListView>(R.id.lvAddStockSuggestions)
+        val suggestions = mutableListOf<StockCatalogEntry>()
+        val adapter = object : ArrayAdapter<StockCatalogEntry>(
+            this,
+            R.layout.item_stock_suggestion,
+            suggestions
+        ) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val itemView = super.getView(position, convertView, parent) as TextView
+                itemView.text = getItem(position)?.displayLabel.orEmpty()
+                return itemView
+            }
+        }
+        listView.adapter = adapter
+        val refreshSuggestions = {
+            val hits = stockCatalog.search(input.text?.toString().orEmpty())
+            suggestions.clear()
+            suggestions.addAll(hits)
+            adapter.notifyDataSetChanged()
+            listView.visibility = if (hits.isEmpty()) View.GONE else View.VISIBLE
+        }
         val submit = {
-            viewModel.addCode(input.text?.toString().orEmpty())
+            addStockFromQuery(input.text?.toString().orEmpty())
             dismissKeyboard(input)
         }
+        input.doAfterTextChanged { refreshSuggestions() }
         input.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 submit()
@@ -234,6 +257,17 @@ class MainActivity : AppCompatActivity() {
                 false
             }
         }
+        listView.setOnItemClickListener { _, _, position, _ ->
+            val code = suggestions.getOrNull(position)?.code ?: return@setOnItemClickListener
+            viewModel.addCode(code)
+            dismissKeyboard(input)
+        }
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.add_stock)
+            .setView(view)
+            .setPositiveButton(R.string.add, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled =
                 viewModel.uiState.value.watchlistLoaded
@@ -245,6 +279,27 @@ class MainActivity : AppCompatActivity() {
         addStockDialog = dialog
         dialog.show()
         input.requestFocus()
+    }
+
+    private fun addStockFromQuery(raw: String) {
+        val query = raw.trim()
+        val code = stockCatalog.resolveAddQuery(query)
+        when {
+            code != null -> viewModel.addCode(code)
+            query.isEmpty() -> viewModel.addCode(raw)
+            stockCatalog.search(query).isNotEmpty() -> {
+                showMessage(getString(R.string.status_pick_suggestion))
+            }
+            else -> viewModel.addCode(raw)
+        }
+    }
+
+    private fun loadStockCatalog(): StockCatalog {
+        return try {
+            assets.open("stock_catalog.txt").bufferedReader().use { StockCatalog.parse(it.readText()) }
+        } catch (_: Exception) {
+            StockCatalog(emptyList())
+        }
     }
 
     private fun showSettingsDialog() {

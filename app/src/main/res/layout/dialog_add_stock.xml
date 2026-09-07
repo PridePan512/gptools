@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:orientation="vertical"
     android:padding="8dp">
 
     <com.google.android.material.textfield.TextInputLayout
@@ -16,7 +17,16 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:imeOptions="actionDone"
-            android:inputType="textCapCharacters"
+            android:inputType="text"
             android:maxLines="1" />
     </com.google.android.material.textfield.TextInputLayout>
-</FrameLayout>
+
+    <ListView
+        android:id="@+id/lvAddStockSuggestions"
+        android:layout_width="match_parent"
+        android:layout_height="240dp"
+        android:layout_marginTop="4dp"
+        android:divider="?android:attr/listDivider"
+        android:dividerHeight="1dp"
+        android:visibility="gone" />
+</LinearLayout>
