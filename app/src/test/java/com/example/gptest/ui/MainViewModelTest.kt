@@ -15,6 +15,7 @@ import com.example.gptest.ui.alert.AlertMetric
 import com.example.gptest.ui.alert.AlertNotifier
 import com.example.gptest.ui.alert.AlertNotifyMode
 import com.example.gptest.ui.alert.AlertOperator
+import com.example.gptest.ui.alert.AlertQuickAdd
 import com.example.gptest.ui.alert.AlertRule
 import com.example.gptest.ui.alert.AlertRuleStatus
 import com.example.gptest.ui.alert.AlertStockOption
@@ -377,6 +378,56 @@ class MainViewModelTest {
         val saved = alerts.loadRules().single()
         assertEquals(AlertRuleStatus.FIRED, saved.status)
         assertTrue(saved.lastTriggeredMs != null)
+    }
+
+    @Test
+    fun addQuickAlert_createsCooldownRule() = runTest(dispatcher) {
+        val alerts = FakeAlerts(mutableListOf())
+        val vm = viewModel(
+            quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50", name = "平安银行")))),
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            clock = closedClock(),
+            alerts = alerts
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        advanceUntilIdle()
+        val events = mutableListOf<UiEvent>()
+        val job = launch { vm.events.collect { events.add(it) } }
+        advanceUntilIdle()
+        vm.addQuickAlert("sz000001", AlertOperator.LIMIT_UP)
+        advanceUntilIdle()
+        job.cancel()
+        val rule = alerts.loadRules().single()
+        assertEquals("平安银行  涨停", rule.name)
+        assertEquals(AlertNotifyMode.COOLDOWN, rule.notifyMode)
+        assertEquals(AlertOperator.LIMIT_UP, rule.conditions.single().operator)
+        assertEquals(listOf(UiEvent.QuickAlertAdded("平安银行  涨停", AlertOperator.LIMIT_UP)), events)
+    }
+
+    @Test
+    fun addQuickAlert_secondClick_deletesMatchingRule() = runTest(dispatcher) {
+        val keep = AlertQuickAdd.createRule(AlertStockOption("sz000001", "平安银行"), AlertOperator.LIMIT_DOWN)
+        val alerts = FakeAlerts(mutableListOf(keep))
+        val vm = viewModel(
+            quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50", name = "平安银行")))),
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            clock = closedClock(),
+            alerts = alerts
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        advanceUntilIdle()
+        vm.addQuickAlert("sz000001", AlertOperator.LIMIT_UP)
+        advanceUntilIdle()
+        val events = mutableListOf<UiEvent>()
+        val job = launch { vm.events.collect { events.add(it) } }
+        advanceUntilIdle()
+        vm.addQuickAlert("sz000001", AlertOperator.LIMIT_UP)
+        advanceUntilIdle()
+        job.cancel()
+        assertEquals(listOf(keep), alerts.loadRules())
+        assertEquals(listOf(UiEvent.QuickAlertRemoved("平安银行  涨停", AlertOperator.LIMIT_UP)), events)
     }
 
     @Test

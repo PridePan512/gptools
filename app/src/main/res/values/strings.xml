@@ -108,5 +108,8 @@
     <string name="alert_deleted">已删除规则</string>
     <string name="alert_enable">启用规则</string>
     <string name="alert_need_watchlist">请先在自选列表添加股票</string>
+    <string name="quick_alert_title">一键监控</string>
+    <string name="quick_alert_added">已添加 %1$s</string>
+    <string name="quick_alert_removed">已取消 %1$s</string>
     <string name="alert_condition_tap_edit">点按修改这条条件</string>
 </resources>

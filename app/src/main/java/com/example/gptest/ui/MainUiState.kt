@@ -4,6 +4,7 @@ import com.example.gptest.business.QuoteCard
 import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.business.QuoteSortMode
 import com.example.gptest.business.TradingSession
+import com.example.gptest.ui.alert.AlertOperator
 import com.example.gptest.ui.alert.RapidAlertThresholds
 
 sealed interface QuoteStatus {
@@ -24,6 +25,8 @@ sealed interface UiEvent {
     data object AddInvalidCode : UiEvent
     data object AddDuplicateCode : UiEvent
     data class OfferUndoDelete(val label: String) : UiEvent
+    data class QuickAlertAdded(val label: String, val operator: AlertOperator) : UiEvent
+    data class QuickAlertRemoved(val label: String, val operator: AlertOperator) : UiEvent
 }
 
 data class MainUiState(

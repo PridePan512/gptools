@@ -1,14 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:fillViewport="true">
 
-    <include
-        android:id="@+id/quoteCard"
-        layout="@layout/view_quote_card"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp" />
+        android:orientation="vertical"
+        android:paddingBottom="16dp">
 
+        <include
+            android:id="@+id/quoteCard"
+            layout="@layout/view_quote_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp" />
+
+        <TextView
+            android:id="@+id/tvQuickAlerts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="16dp"
+            android:layout_marginEnd="12dp"
+            android:text="@string/quick_alert_title"
+            android:textAppearance="?attr/textAppearanceSubtitle2" />
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/chipQuickAlerts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="8dp"
+            android:layout_marginTop="4dp"
+            app:chipSpacingHorizontal="8dp"
+            app:chipSpacingVertical="4dp" />
+    </LinearLayout>
 </androidx.core.widget.NestedScrollView>

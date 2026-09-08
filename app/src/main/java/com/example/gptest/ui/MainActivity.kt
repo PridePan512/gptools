@@ -123,6 +123,14 @@ class MainActivity : AppCompatActivity() {
                             UiEvent.AddInvalidCode -> showMessage(getString(R.string.status_invalid_code))
                             UiEvent.AddDuplicateCode -> showMessage(getString(R.string.status_duplicate_code))
                             is UiEvent.OfferUndoDelete -> showUndoSnackbar(event.label)
+                            is UiEvent.QuickAlertAdded -> {
+                                detailSheet?.markOperator(event.operator)
+                                showMessage(getString(R.string.quick_alert_added, event.label))
+                            }
+                            is UiEvent.QuickAlertRemoved -> {
+                                detailSheet?.unmarkOperator(event.operator)
+                                showMessage(getString(R.string.quick_alert_removed, event.label))
+                            }
                         }
                     }
                 }

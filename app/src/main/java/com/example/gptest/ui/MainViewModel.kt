@@ -9,6 +9,7 @@ import com.example.gptest.data.QuoteDataSource
 import com.example.gptest.data.SortModeStore
 import com.example.gptest.data.WatchlistDataSource
 import com.example.gptest.ui.alert.AlertNotifier
+import com.example.gptest.ui.alert.AlertOperator
 import com.example.gptest.ui.alert.NoOpAlertNotifier
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +61,8 @@ class MainViewModel(
         priceSurge: String,
         priceDrop: String
     ) = monitor.saveRapidThresholds(volumeSurge, volumeShrink, priceSurge, priceDrop)
+
+    fun addQuickAlert(code: String, operator: AlertOperator) = monitor.addQuickAlert(code, operator)
 
     fun startPolling(intervalText: String) {
         monitor.startPolling(intervalText)

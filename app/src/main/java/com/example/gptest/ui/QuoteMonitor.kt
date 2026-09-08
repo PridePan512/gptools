@@ -13,6 +13,9 @@ import com.example.gptest.data.SortModeStore
 import com.example.gptest.data.WatchlistDataSource
 import com.example.gptest.ui.alert.AlertEvaluator
 import com.example.gptest.ui.alert.AlertNotifier
+import com.example.gptest.ui.alert.AlertOperator
+import com.example.gptest.ui.alert.AlertQuickAdd
+import com.example.gptest.ui.alert.AlertStockOption
 import com.example.gptest.ui.alert.NoOpAlertNotifier
 import com.example.gptest.ui.alert.RapidAlertThresholds
 import kotlinx.coroutines.CoroutineDispatcher
@@ -182,6 +185,35 @@ class QuoteMonitor(
         rapidThresholds = RapidAlertThresholds.parse(volumeSurge, volumeShrink, priceSurge, priceDrop)
         sortModeStore.rapidAlertThresholds = rapidThresholds
         publish()
+    }
+
+    fun addQuickAlert(code: String, operator: AlertOperator) {
+        if (operator.needsValue) return
+        scope.launch {
+            val event = withContext(ioDispatcher) { addQuickAlertBlocking(code, operator) }
+            _events.tryEmit(event)
+        }
+    }
+
+    private fun addQuickAlertBlocking(code: String, operator: AlertOperator): UiEvent {
+        val stock = stockOption(code)
+        val label = "${stock.name}  ${operator.label}"
+        val ids = AlertQuickAdd.matchingRuleIds(alertDataSource.loadRules(), code, operator)
+        if (ids.isNotEmpty()) {
+            ids.forEach { alertDataSource.deleteRule(it) }
+            return UiEvent.QuickAlertRemoved(label, operator)
+        }
+        alertDataSource.saveRule(AlertQuickAdd.createRule(stock, operator))
+        return UiEvent.QuickAlertAdded(label, operator)
+    }
+
+    private fun stockOption(code: String): AlertStockOption {
+        val quote = quotes.find { it.requestCode == code }
+        return if (quote != null) AlertStockOption.fromQuote(quote) else AlertStockOption.fromCode(code)
+    }
+
+    fun quickAlertOperators(code: String): Set<AlertOperator> {
+        return AlertQuickAdd.operatorsFor(alertDataSource.loadRules(), code)
     }
 
     fun startPolling(intervalText: String) {
