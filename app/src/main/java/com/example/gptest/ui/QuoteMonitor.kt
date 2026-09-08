@@ -95,11 +95,9 @@ class QuoteMonitor(
         persist { watchlistDataSource.add(code) }
         val label = code.removePrefix("sz").removePrefix("sh").removePrefix("bj")
         _events.tryEmit(UiEvent.AddSucceeded(label))
-        if (isRunning) {
-            publish()
+        publish()
+        if (isRunning && TradingSession.isOpen(clock)) {
             refreshQuotesNow()
-        } else {
-            publish()
         }
     }
 
@@ -123,7 +121,7 @@ class QuoteMonitor(
             if (isRunning) stopPolling()
             return
         }
-        if (isRunning) refreshQuotesNow()
+        if (isRunning && TradingSession.isOpen(clock)) refreshQuotesNow()
     }
 
     fun undoRemove() {
@@ -141,7 +139,7 @@ class QuoteMonitor(
             watchlistDataSource.reorder(watchlist.toList())
         }
         publish()
-        if (isRunning) refreshQuotesNow()
+        if (isRunning && TradingSession.isOpen(clock)) refreshQuotesNow()
     }
 
     fun reorder(codes: List<String>) {
@@ -256,6 +254,7 @@ class QuoteMonitor(
     }
 
     private suspend fun scheduleNextOrFinish(keepErrorStatus: Boolean) {
+        if (!isRunning) return
         if (TradingSession.isOpen(clock)) {
             if (!keepErrorStatus) {
                 status = QuoteStatus.Running
@@ -266,6 +265,24 @@ class QuoteMonitor(
                 fetchOnceThenSchedule()
             }
             return
+        }
+        if (TradingSession.shouldHoldUntilOpen(clock)) {
+            val phase = TradingSession.phase(clock)
+            if (!keepErrorStatus) {
+                status = QuoteStatus.SessionOnce(phase)
+                publish()
+            }
+            val waitMs = TradingSession.millisUntilOpen(clock)?.coerceAtLeast(1L) ?: intervalMs
+            delay(waitMs)
+            if (!isRunning) return
+            if (TradingSession.isOpen(clock)) {
+                fetchOnceThenSchedule()
+                return
+            }
+            if (TradingSession.shouldHoldUntilOpen(clock)) {
+                scheduleNextOrFinish(keepErrorStatus)
+                return
+            }
         }
         isRunning = false
         pollJob = null

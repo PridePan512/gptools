@@ -24,8 +24,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -35,9 +37,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.util.concurrent.atomic.AtomicReference
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModelTest {
@@ -451,6 +456,69 @@ class MainViewModelTest {
         assertFalse(vm.uiState.value.isRunning)
     }
 
+    @Test
+    fun lunch_holdsMonitorWithoutStopping() = runTest(dispatcher) {
+        val store = FakeSortStore()
+        val quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50"))))
+        val vm = viewModel(
+            quotes = quotes,
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            sortStore = store,
+            clock = lunchClock()
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        runCurrent()
+        assertTrue(vm.uiState.value.isRunning)
+        assertTrue(store.monitorRunning)
+        assertEquals(QuoteStatus.SessionOnce(TradingSession.Phase.LUNCH), vm.uiState.value.status)
+        assertEquals(1, quotes.fetchCount)
+        vm.stopPolling()
+    }
+
+    @Test
+    fun preOpen_holdsMonitorUntilStopped() = runTest(dispatcher) {
+        val store = FakeSortStore()
+        val quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50"))))
+        val vm = viewModel(
+            quotes = quotes,
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            sortStore = store,
+            clock = preOpenClock()
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        runCurrent()
+        assertTrue(vm.uiState.value.isRunning)
+        assertTrue(store.monitorRunning)
+        assertEquals(QuoteStatus.SessionOnce(TradingSession.Phase.PRE_OPEN), vm.uiState.value.status)
+        assertEquals(1, quotes.fetchCount)
+        vm.stopPolling()
+    }
+
+    @Test
+    fun lunch_resumesFetchingWhenAfternoonOpens() = runTest(dispatcher) {
+        val clock = MutableSessionClock(LocalDate.of(2026, 9, 3), LocalTime.of(12, 59, 58))
+        val quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50"))))
+        val vm = viewModel(
+            quotes = quotes,
+            watchlist = FakeWatchlist(mutableListOf("sz000001")),
+            clock = clock
+        )
+        advanceUntilIdle()
+        vm.startPolling("5")
+        runCurrent()
+        assertEquals(1, quotes.fetchCount)
+        assertEquals(QuoteStatus.SessionOnce(TradingSession.Phase.LUNCH), vm.uiState.value.status)
+        clock.set(LocalTime.of(13, 0))
+        advanceTimeBy(2_000)
+        runCurrent()
+        assertEquals(2, quotes.fetchCount)
+        assertEquals(QuoteStatus.Running, vm.uiState.value.status)
+        assertTrue(vm.uiState.value.isRunning)
+        vm.stopPolling()
+    }
+
     private fun viewModel(
         quotes: QuoteDataSource = FakeQuotes(Result.success(emptyList())),
         watchlist: WatchlistDataSource = FakeWatchlist(),
@@ -472,12 +540,14 @@ class MainViewModelTest {
         )
     }
 
-    private fun closedClock(): Clock {
-        val instant = ZonedDateTime.of(
-            LocalDate.of(2026, 9, 6),
-            LocalTime.of(10, 0),
-            TradingSession.SHANGHAI
-        ).toInstant()
+    private fun closedClock(): Clock = sessionClock(LocalDate.of(2026, 9, 6), LocalTime.of(10, 0))
+
+    private fun lunchClock(): Clock = sessionClock(LocalDate.of(2026, 9, 3), LocalTime.of(12, 0))
+
+    private fun preOpenClock(): Clock = sessionClock(LocalDate.of(2026, 9, 3), LocalTime.of(9, 0))
+
+    private fun sessionClock(date: LocalDate, time: LocalTime): Clock {
+        val instant = ZonedDateTime.of(date, time, TradingSession.SHANGHAI).toInstant()
         return Clock.fixed(instant, TradingSession.SHANGHAI)
     }
 
@@ -497,8 +567,11 @@ class MainViewModelTest {
     private class FakeQuotes(private val result: Result<List<QuoteSnapshot>>) : QuoteDataSource {
         var lastRequested: List<String> = emptyList()
             private set
+        var fetchCount = 0
+            private set
 
         override fun fetchQuotes(codes: List<String>): Result<List<QuoteSnapshot>> {
+            fetchCount += 1
             lastRequested = codes
             return result
         }
@@ -522,6 +595,25 @@ class MainViewModelTest {
         override var monitorRunning: Boolean = false,
         override var rapidAlertThresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT
     ) : SortModeStore
+
+    private class MutableSessionClock(
+        date: LocalDate,
+        time: LocalTime,
+        private val zone: ZoneId = TradingSession.SHANGHAI,
+        private val instantRef: AtomicReference<Instant> = AtomicReference(
+            ZonedDateTime.of(date, time, TradingSession.SHANGHAI).toInstant()
+        )
+    ) : Clock() {
+        override fun instant(): Instant = instantRef.get()
+        override fun getZone(): ZoneId = zone
+        override fun withZone(zone: ZoneId): Clock =
+            MutableSessionClock(LocalDate.now(this), LocalTime.now(this), zone, instantRef)
+
+        fun set(time: LocalTime) {
+            val current = ZonedDateTime.ofInstant(instantRef.get(), zone)
+            instantRef.set(current.toLocalDate().atTime(time).atZone(zone).toInstant())
+        }
+    }
 
     private class RecordingGateway : MonitorServiceGateway {
         var starts = 0

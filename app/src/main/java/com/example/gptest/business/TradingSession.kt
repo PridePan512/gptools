@@ -2,6 +2,7 @@ package com.example.gptest.business
 
 import java.time.Clock
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -33,6 +34,23 @@ object TradingSession {
             time <= AFTERNOON_CLOSE -> Phase.OPEN
             else -> Phase.CLOSED
         }
+    }
+
+    fun millisUntilOpen(clock: Clock = Clock.system(SHANGHAI)): Long? {
+        val now = ZonedDateTime.now(clock.withZone(SHANGHAI))
+        val targetTime = when (phase(clock)) {
+            Phase.PRE_OPEN -> MORNING_OPEN
+            Phase.LUNCH -> AFTERNOON_OPEN
+            Phase.OPEN -> return 0L
+            Phase.CLOSED -> return null
+        }
+        val target = now.toLocalDate().atTime(targetTime).atZone(SHANGHAI)
+        return Duration.between(now, target).toMillis().coerceAtLeast(0L)
+    }
+
+    fun shouldHoldUntilOpen(clock: Clock = Clock.system(SHANGHAI)): Boolean {
+        val current = phase(clock)
+        return current == Phase.PRE_OPEN || current == Phase.LUNCH
     }
 
     private val MORNING_OPEN = LocalTime.of(9, 30)

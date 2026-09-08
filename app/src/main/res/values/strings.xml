@@ -36,9 +36,11 @@
     <string name="monitor_notification_title">盯盘检测中</string>
     <string name="monitor_notification_text">间隔 %1$d 秒，监控规则会在后台触发</string>
     <string name="status_stopped">已停止</string>
-    <string name="status_preopen_once">未开盘，已更新一次，未启动定时刷新</string>
-    <string name="status_lunch_once">午休中，已更新一次，未启动定时刷新</string>
+    <string name="status_preopen_once">未开盘，9:30 自动开始</string>
+    <string name="status_lunch_once">午休中，13:00 自动继续</string>
     <string name="status_closed_once">已收盘，已更新一次，未启动定时刷新</string>
+    <string name="monitor_notification_paused_preopen">未开盘，9:30 开始盯盘</string>
+    <string name="monitor_notification_paused_lunch">午休暂停，13:00 继续盯盘</string>
     <string name="status_invalid_code">代码无效</string>
     <string name="status_duplicate_code">已在列表中</string>
     <string name="status_empty_code">请输入代码或名称</string>

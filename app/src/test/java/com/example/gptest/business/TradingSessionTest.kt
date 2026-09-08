@@ -2,6 +2,7 @@ package com.example.gptest.business
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Clock
@@ -52,6 +53,33 @@ class TradingSessionTest {
         val clock = shanghaiClock(LocalTime.of(10, 0), saturday)
         assertEquals(TradingSession.Phase.CLOSED, TradingSession.phase(clock))
         assertFalse(TradingSession.isOpen(clock))
+    }
+
+    @Test
+    fun millisUntilOpen_preOpen_waitsUntilMorningOpen() {
+        val clock = shanghaiClock(LocalTime.of(9, 0))
+        assertEquals(30 * 60 * 1000L, TradingSession.millisUntilOpen(clock))
+    }
+
+    @Test
+    fun millisUntilOpen_lunch_waitsUntilAfternoonOpen() {
+        val clock = shanghaiClock(LocalTime.of(12, 0))
+        assertEquals(60 * 60 * 1000L, TradingSession.millisUntilOpen(clock))
+    }
+
+    @Test
+    fun millisUntilOpen_open_isZero() {
+        assertEquals(0L, TradingSession.millisUntilOpen(shanghaiClock(LocalTime.of(10, 0))))
+    }
+
+    @Test
+    fun millisUntilOpen_closed_isNull() {
+        assertNull(TradingSession.millisUntilOpen(shanghaiClock(LocalTime.of(15, 1))))
+        assertNull(
+            TradingSession.millisUntilOpen(
+                shanghaiClock(LocalTime.of(10, 0), LocalDate.of(2026, 9, 5))
+            )
+        )
     }
 
     private fun shanghaiClock(

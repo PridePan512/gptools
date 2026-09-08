@@ -13,6 +13,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.example.gptest.R
+import com.example.gptest.business.TradingSession
 import com.example.gptest.data.SortPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +36,7 @@ class QuoteMonitorService : Service() {
         ServiceCompat.startForeground(
             this,
             NOTIFICATION_ID,
-            buildNotification(monitor.uiState.value.intervalSeconds),
+            buildNotification(monitor.uiState.value),
             foregroundType()
         )
         if (intent?.action == ACTION_STOP) {
@@ -78,7 +79,7 @@ class QuoteMonitorService : Service() {
             monitor.uiState.collect { state ->
                 if (state.isRunning) {
                     getSystemService(NotificationManager::class.java)
-                        ?.notify(NOTIFICATION_ID, buildNotification(state.intervalSeconds))
+                        ?.notify(NOTIFICATION_ID, buildNotification(state))
                 } else {
                     stopNow()
                 }
@@ -93,7 +94,7 @@ class QuoteMonitorService : Service() {
         stopSelf()
     }
 
-    private fun buildNotification(intervalSeconds: Long): Notification {
+    private fun buildNotification(state: MainUiState): Notification {
         val openApp = PendingIntent.getActivity(
             this,
             0,
@@ -111,13 +112,22 @@ class QuoteMonitorService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_alert)
             .setContentTitle(getString(R.string.monitor_notification_title))
-            .setContentText(getString(R.string.monitor_notification_text, intervalSeconds))
+            .setContentText(notificationText(state))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(openApp)
             .addAction(0, getString(R.string.stop), stop)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
+    }
+
+    private fun notificationText(state: MainUiState): String {
+        val paused = state.status as? QuoteStatus.SessionOnce
+        return when (paused?.phase) {
+            TradingSession.Phase.PRE_OPEN -> getString(R.string.monitor_notification_paused_preopen)
+            TradingSession.Phase.LUNCH -> getString(R.string.monitor_notification_paused_lunch)
+            else -> getString(R.string.monitor_notification_text, state.intervalSeconds)
+        }
     }
 
     private fun ensureChannel() {

@@ -137,7 +137,7 @@ class MainActivity : AppCompatActivity() {
         }
         settingsIntervalInput?.isEnabled = !state.isRunning
         bindFab(state.isRunning)
-        binding.root.keepScreenOn = state.isRunning
+        binding.root.keepScreenOn = state.isRunning && state.status == QuoteStatus.Running
         binding.btnSort.setText(sortLabel(state.sortMode))
         bindStatus(state.status)
         bindLastUpdated(state.lastUpdatedMs)

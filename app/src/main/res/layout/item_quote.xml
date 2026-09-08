@@ -33,7 +33,7 @@
 
         <TextView
             android:id="@+id/tvRowPrice"
-            android:layout_width="80dp"
+            android:layout_width="70dp"
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:gravity="end"
@@ -43,7 +43,7 @@
 
         <TextView
             android:id="@+id/tvChangePercent"
-            android:layout_width="80dp"
+            android:layout_width="70dp"
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:gravity="end"
@@ -53,7 +53,7 @@
 
         <TextView
             android:id="@+id/tvChangeAmount"
-            android:layout_width="80dp"
+            android:layout_width="70dp"
             android:layout_height="wrap_content"
             android:ellipsize="end"
             android:gravity="end"

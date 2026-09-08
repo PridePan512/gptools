@@ -131,21 +131,21 @@
                     android:textAppearance="?attr/textAppearanceCaption" />
 
                 <TextView
-                    android:layout_width="80dp"
+                    android:layout_width="70dp"
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:text="@string/column_price"
                     android:textAppearance="?attr/textAppearanceCaption" />
 
                 <TextView
-                    android:layout_width="80dp"
+                    android:layout_width="70dp"
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:text="@string/column_change"
                     android:textAppearance="?attr/textAppearanceCaption" />
 
                 <TextView
-                    android:layout_width="80dp"
+                    android:layout_width="70dp"
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:text="@string/column_change_amount"
