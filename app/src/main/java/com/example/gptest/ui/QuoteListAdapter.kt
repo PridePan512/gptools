@@ -2,8 +2,10 @@ package com.example.gptest.ui
 
 import android.annotation.SuppressLint
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
@@ -59,7 +61,7 @@ class QuoteDiffCallback(
 
 class QuoteListAdapter(
     private val onClick: (QuoteSnapshot) -> Unit,
-    private val onDelete: (String) -> Unit,
+    private val onLongPress: (QuoteSnapshot) -> Unit,
     private val onStartDrag: (ViewHolder) -> Unit,
     private val applyChangeColor: (TextView, String) -> Unit
 ) : RecyclerView.Adapter<QuoteListAdapter.ViewHolder>() {
@@ -94,7 +96,7 @@ class QuoteListAdapter(
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        holder.bind(items[position], resetSwipe = true)
+        holder.bind(items[position])
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
@@ -102,40 +104,41 @@ class QuoteListAdapter(
             onBindViewHolder(holder, position)
             return
         }
-        holder.bind(items[position], resetSwipe = false)
-    }
-
-    override fun onViewRecycled(holder: ViewHolder) {
-        holder.resetSwipe()
-        super.onViewRecycled(holder)
+        holder.bind(items[position])
     }
 
     override fun getItemCount(): Int = items.size
 
     inner class ViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val content: View = itemView.findViewById(R.id.quoteRowContent)
+        private val dragHandle: ImageView = itemView.findViewById(R.id.ivDragHandle)
         private val tvName: TextView = itemView.findViewById(R.id.tvName)
         private val tvPrice: TextView = itemView.findViewById(R.id.tvRowPrice)
         private val tvChange: TextView = itemView.findViewById(R.id.tvChangePercent)
         private val tvChangeAmount: TextView = itemView.findViewById(R.id.tvChangeAmount)
         private val defaultNameColor = tvName.currentTextColor
-        private val touchListener = SwipeToDeleteTouchListener(
-            content = content,
-            onClick = { currentRow()?.let { onClick(it.quote) } },
-            onDelete = { currentRow()?.let { onDelete(it.quote.requestCode) } },
-            onLongPress = { onStartDrag(this) },
-            isLongPressEnabled = { currentRow()?.dragEnabled == true }
-        )
 
         init {
+            content.setOnClickListener {
+                currentRow()?.let { onClick(it.quote) }
+            }
+            content.setOnLongClickListener {
+                val row = currentRow() ?: return@setOnLongClickListener false
+                onLongPress(row.quote)
+                true
+            }
             @SuppressLint("ClickableViewAccessibility")
-            content.setOnTouchListener(touchListener)
+            dragHandle.setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN && currentRow()?.dragEnabled == true) {
+                    onStartDrag(this)
+                    true
+                } else {
+                    false
+                }
+            }
         }
 
-        fun bind(row: QuoteRow, resetSwipe: Boolean) {
-            if (resetSwipe) {
-                resetSwipe()
-            }
+        fun bind(row: QuoteRow) {
             val quote = row.quote
             tvName.text = quote.name.ifEmpty { "--" }
             tvPrice.text = quote.price.ifEmpty { "--" }
@@ -150,11 +153,7 @@ class QuoteListAdapter(
                 LimitBoard.NONE -> null
             }
             tvName.setTextColor(boardColor ?: defaultNameColor)
-            content.setBackgroundResource(R.drawable.bg_quote_row)
-        }
-
-        fun resetSwipe() {
-            touchListener.reset(content)
+            dragHandle.visibility = if (row.dragEnabled) View.VISIBLE else View.GONE
         }
 
         private fun currentRow(): QuoteRow? {

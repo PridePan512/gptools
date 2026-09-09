@@ -216,6 +216,21 @@ class MainActivity : AppCompatActivity(), QuoteTabHost {
         sheet.show(code)
     }
 
+    override fun showQuoteActions(tabId: String, quote: QuoteSnapshot) {
+        val name = quote.name.trim()
+        val title = if (name.isNotEmpty() && name != "--") {
+            name
+        } else {
+            QuoteListAdapter.displayCode(quote)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(title)
+            .setItems(arrayOf(getString(R.string.delete))) { _, which ->
+                if (which == 0) viewModel.removeCode(quote.requestCode, tabId)
+            }
+            .show()
+    }
+
     private fun toggleMonitor() {
         if (viewModel.uiState.value.isRunning) {
             viewModel.stopPolling()

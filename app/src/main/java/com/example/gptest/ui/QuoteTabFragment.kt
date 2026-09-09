@@ -13,6 +13,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.databinding.FragmentQuoteTabBinding
 import kotlinx.coroutines.launch
 import java.util.Collections
@@ -39,7 +40,7 @@ class QuoteTabFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         quoteAdapter = QuoteListAdapter(
             onClick = { quote -> (activity as? QuoteTabHost)?.openQuoteDetail(quote.requestCode) },
-            onDelete = { code -> viewModel.removeCode(code, tabId) },
+            onLongPress = { quote -> (activity as? QuoteTabHost)?.showQuoteActions(tabId, quote) },
             onStartDrag = { holder -> itemTouchHelper.startDrag(holder) },
             applyChangeColor = { textView, change ->
                 (activity as? QuoteTabHost)?.applyQuoteChangeColor(textView, change)
@@ -124,4 +125,5 @@ class QuoteTabFragment : Fragment() {
 interface QuoteTabHost {
     fun openQuoteDetail(code: String)
     fun applyQuoteChangeColor(view: TextView, changePercent: String)
+    fun showQuoteActions(tabId: String, quote: QuoteSnapshot)
 }
