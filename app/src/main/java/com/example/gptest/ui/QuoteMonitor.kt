@@ -36,6 +36,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.Clock
 
+private const val HISTORY_KEEP_MS = 90_000L
+private const val HISTORY_GAP_RESET_MS = 120_000L
+
 class QuoteMonitor(
     private val quoteDataSource: QuoteDataSource,
     private val watchlistDataSource: WatchlistDataSource,
@@ -49,7 +52,7 @@ class QuoteMonitor(
     private val tabs = mutableListOf<TabState>()
     private var selectedTabId: String = WatchlistTabs.DEFAULT_ID
     private var quotes: List<QuoteSnapshot> = emptyList()
-    private var previousQuotes: List<QuoteSnapshot> = emptyList()
+    private val recentQuoteBatches = ArrayDeque<List<QuoteSnapshot>>()
     private var selectedCode: String? = null
     private var sortMode: QuoteSortMode = sortModeStore.mode
     private var rawExpanded = false
@@ -319,6 +322,7 @@ class QuoteMonitor(
         pollJob?.cancel()
         pollJob = null
         isRunning = false
+        recentQuoteBatches.clear()
         sortModeStore.monitorRunning = false
         status = QuoteStatus.Stopped
         publish()
@@ -341,7 +345,6 @@ class QuoteMonitor(
         val keepErrorStatus = result.isFailure
         result.fold(
             onSuccess = { latest ->
-                val older = previousQuotes
                 val previous = quotes
                 val fetchedAtMs = clock.millis()
                 val stamped = latest.map { it.copy(fetchedAtMs = fetchedAtMs) }
@@ -350,10 +353,10 @@ class QuoteMonitor(
                     it.requestCode != QuoteParser.SHANGHAI_INDEX_CODE ||
                         allCodes().contains(QuoteParser.SHANGHAI_INDEX_CODE)
                 }
-                previousQuotes = previous
+                rememberQuoteBatch(quotes, fetchedAtMs)
                 lastUpdatedMs = fetchedAtMs
                 publish()
-                evaluateAlerts(previous, quotes, older)
+                evaluateAlerts(previous, quotes, historyQuotes())
             },
             onFailure = { error ->
                 status = if (error is IllegalStateException) {
@@ -415,7 +418,7 @@ class QuoteMonitor(
     private suspend fun evaluateAlerts(
         previous: List<QuoteSnapshot>,
         current: List<QuoteSnapshot>,
-        older: List<QuoteSnapshot>
+        history: List<QuoteSnapshot>
     ) {
         val fires = withContext(ioDispatcher) {
             val rules = alertDataSource.loadRules()
@@ -425,7 +428,7 @@ class QuoteMonitor(
                 current,
                 previous,
                 clock.millis(),
-                older,
+                history,
                 intervalSeconds,
                 rapidThresholds
             )
@@ -435,6 +438,26 @@ class QuoteMonitor(
         if (fires.isNotEmpty()) {
             alertNotifier.notifyFired(fires)
         }
+    }
+
+    private fun rememberQuoteBatch(batch: List<QuoteSnapshot>, fetchedAtMs: Long) {
+        val lastMs = recentQuoteBatches.lastOrNull()?.firstOrNull()?.fetchedAtMs
+        if (lastMs != null && fetchedAtMs - lastMs > HISTORY_GAP_RESET_MS) {
+            recentQuoteBatches.clear()
+        }
+        if (batch.isNotEmpty()) {
+            recentQuoteBatches.addLast(batch)
+        }
+        while (true) {
+            val firstMs = recentQuoteBatches.firstOrNull()?.firstOrNull()?.fetchedAtMs ?: break
+            if (fetchedAtMs - firstMs <= HISTORY_KEEP_MS) break
+            recentQuoteBatches.removeFirst()
+        }
+    }
+
+    private fun historyQuotes(): List<QuoteSnapshot> {
+        if (recentQuoteBatches.size <= 1) return emptyList()
+        return recentQuoteBatches.dropLast(1).flatten()
     }
 
     private fun fetchCodes(): List<String> {

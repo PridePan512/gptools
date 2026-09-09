@@ -19,13 +19,21 @@ data class AlertTickResult(
 object AlertEvaluator {
 
     const val COOLDOWN_MS = 10 * 60 * 1000L
+    const val PRICE_LOOKBACK_MS = 30_000L
+    const val VOLUME_SHORT_MS = 15_000L
+    const val VOLUME_BASELINE_MS = 60_000L
     private const val VOLUME_INDEX = 6
     private const val AMOUNT_INDEX = 37
     private const val TURNOVER_INDEX = 38
     private const val AMPLITUDE_INDEX = 43
     private const val PRICE_MOVE_EPS = 1e-8
-    private const val WINDOW_MIN_RATIO = 0.5
-    private const val WINDOW_MAX_RATIO = 2.0
+    private const val PRICE_MIN_LOOKBACK_MS = 15_000L
+    private const val PRICE_MAX_LOOKBACK_MS = 90_000L
+    private const val VOLUME_SHORT_MIN_MS = 8_000L
+    private const val VOLUME_SHORT_MAX_MS = 30_000L
+    private const val VOLUME_BASELINE_MIN_MS = 40_000L
+    private const val VOLUME_BASELINE_MAX_MS = 90_000L
+    private const val VOLUME_MIN_HANDS = 200.0
 
     fun evaluate(
         rules: List<AlertRule>,
@@ -34,11 +42,12 @@ object AlertEvaluator {
         nowMs: Long,
         older: List<QuoteSnapshot> = emptyList(),
         intervalSeconds: Long = 5L,
-        thresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT
+        thresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT,
+        history: List<QuoteSnapshot> = older
     ): AlertTickResult {
         val currentByCode = current.associateBy { it.requestCode }
         val previousByCode = previous.associateBy { it.requestCode }
-        val olderByCode = older.associateBy { it.requestCode }
+        val historyByCode = history.groupBy { it.requestCode }
         val fires = mutableListOf<AlertFire>()
         val updated = rules.map { rule ->
             if (!rule.enabled) {
@@ -49,16 +58,16 @@ object AlertEvaluator {
             }
             val matched = when (rule.matchMode) {
                 AlertMatchMode.ALL -> rule.conditions.all {
-                    isSatisfied(it, currentByCode, previousByCode, olderByCode, intervalSeconds, thresholds)
+                    isSatisfied(it, currentByCode, previousByCode, historyByCode, intervalSeconds, thresholds)
                 }
                 AlertMatchMode.ANY -> rule.conditions.any {
-                    isSatisfied(it, currentByCode, previousByCode, olderByCode, intervalSeconds, thresholds)
+                    isSatisfied(it, currentByCode, previousByCode, historyByCode, intervalSeconds, thresholds)
                 }
             }
             val status = if (matched) AlertRuleStatus.FIRED else AlertRuleStatus.WAITING
             if (matched && shouldNotify(rule, nowMs)) {
                 val detail = rule.conditions.joinToString("；") {
-                    conditionDetail(it, currentByCode, previousByCode, olderByCode)
+                    conditionDetail(it, currentByCode, previousByCode, historyByCode)
                 }
                 val next = rule.copy(
                     status = status,
@@ -90,7 +99,7 @@ object AlertEvaluator {
         condition: AlertCondition,
         currentByCode: Map<String, QuoteSnapshot>,
         previousByCode: Map<String, QuoteSnapshot>,
-        olderByCode: Map<String, QuoteSnapshot> = emptyMap(),
+        historyByCode: Map<String, List<QuoteSnapshot>> = emptyMap(),
         intervalSeconds: Long = 5L,
         thresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT
     ): Boolean {
@@ -102,10 +111,7 @@ object AlertEvaluator {
                 AlertOperator.PRICE_SURGE,
                 AlertOperator.PRICE_DROP -> rapidSatisfied(
                     condition.operator,
-                    quote,
-                    previousByCode[condition.stock.code],
-                    olderByCode[condition.stock.code],
-                    intervalSeconds,
+                    seriesFor(condition.stock.code, quote, previousByCode[condition.stock.code], historyByCode),
                     thresholds
                 )
                 else -> boardSatisfied(condition.operator, quote, previousByCode[condition.stock.code])
@@ -177,19 +183,19 @@ object AlertEvaluator {
         condition: AlertCondition,
         currentByCode: Map<String, QuoteSnapshot>,
         previousByCode: Map<String, QuoteSnapshot>,
-        olderByCode: Map<String, QuoteSnapshot>
+        historyByCode: Map<String, List<QuoteSnapshot>>
     ): String {
         val quote = currentByCode[condition.stock.code]
         if (condition.operator == AlertOperator.VOLUME_SURGE ||
             condition.operator == AlertOperator.VOLUME_SHRINK
         ) {
-            val deltas = volumeDeltas(
-                quote,
-                previousByCode[condition.stock.code],
-                olderByCode[condition.stock.code]
+            val windows = volumeWindows(
+                seriesFor(condition.stock.code, quote, previousByCode[condition.stock.code], historyByCode)
             )
-            if (deltas != null) {
-                return "${condition.sentence()}（本口 ${formatHands(deltas.current)} 手 / 上一口 ${formatHands(deltas.previous)} 手）"
+            if (windows != null) {
+                val recentLabel = "${windows.recentMs / 1000}秒"
+                val baselineLabel = "${windows.baselineMs / 1000}秒"
+                return "${condition.sentence()}（近$recentLabel ${formatHands(windows.recent)} 手 / 此前$baselineLabel ${formatHands(windows.baseline)} 手）"
             }
         }
         if (!condition.operator.needsValue) {
@@ -203,26 +209,30 @@ object AlertEvaluator {
 
     private fun rapidSatisfied(
         operator: AlertOperator,
-        current: QuoteSnapshot?,
-        previous: QuoteSnapshot?,
-        older: QuoteSnapshot?,
-        intervalSeconds: Long,
+        series: List<QuoteSnapshot>,
         thresholds: RapidAlertThresholds
     ): Boolean {
         return when (operator) {
             AlertOperator.PRICE_SURGE, AlertOperator.PRICE_DROP -> {
-                val currentPrice = numeric(current?.price) ?: return false
-                val previousPrice = numeric(previous?.price) ?: return false
+                val current = series.lastOrNull() ?: return false
+                val currentPrice = numeric(current.price) ?: return false
+                val anchor = nearestBefore(
+                    series,
+                    current.fetchedAtMs,
+                    PRICE_LOOKBACK_MS,
+                    PRICE_MIN_LOOKBACK_MS,
+                    PRICE_MAX_LOOKBACK_MS
+                ) ?: return false
+                val previousPrice = numeric(anchor.price) ?: return false
                 if (previousPrice <= 0.0) return false
-                val elapsedMs = elapsedMs(current, previous) ?: return false
-                if (!windowMatchesInterval(elapsedMs, intervalSeconds)) return false
-                val expectedMs = intervalSeconds * 1000.0
+                val elapsedMs = current.fetchedAtMs - anchor.fetchedAtMs
                 val moveRatio = if (operator == AlertOperator.PRICE_SURGE) {
                     thresholds.priceSurgeRatio
                 } else {
                     thresholds.priceDropRatio
                 }
-                val threshold = moveRatio * (elapsedMs / expectedMs)
+                val scale = (elapsedMs.toDouble() / PRICE_LOOKBACK_MS).coerceAtLeast(1.0)
+                val threshold = moveRatio * scale
                 val change = (currentPrice - previousPrice) / previousPrice
                 if (operator == AlertOperator.PRICE_SURGE) {
                     change + PRICE_MOVE_EPS >= threshold
@@ -231,57 +241,81 @@ object AlertEvaluator {
                 }
             }
             AlertOperator.VOLUME_SURGE, AlertOperator.VOLUME_SHRINK -> {
-                val deltas = volumeDeltas(current, previous, older) ?: return false
-                val prevWindowMs = elapsedMs(previous, older) ?: return false
-                val currWindowMs = elapsedMs(current, previous) ?: return false
-                if (!windowMatchesInterval(prevWindowMs, intervalSeconds)) return false
-                if (!windowMatchesInterval(currWindowMs, intervalSeconds)) return false
-                if (!windowsComparable(prevWindowMs, currWindowMs)) return false
-                val prevRate = deltas.previous / prevWindowMs
-                val currRate = deltas.current / currWindowMs
+                val windows = volumeWindows(series) ?: return false
                 if (operator == AlertOperator.VOLUME_SURGE) {
-                    currRate >= prevRate * thresholds.volumeSurgeRatio
+                    if (windows.recent + PRICE_MOVE_EPS < VOLUME_MIN_HANDS) return false
+                    if (windows.baseline <= 0.0) return true
+                    windows.recentRate + PRICE_MOVE_EPS >= windows.baselineRate * thresholds.volumeSurgeRatio
                 } else {
-                    currRate <= prevRate * thresholds.volumeShrinkRatio
+                    if (windows.baseline + PRICE_MOVE_EPS < VOLUME_MIN_HANDS) return false
+                    if (windows.baselineRate <= 0.0) return false
+                    windows.recentRate - PRICE_MOVE_EPS <= windows.baselineRate * thresholds.volumeShrinkRatio
                 }
             }
             else -> false
         }
     }
 
-    private fun elapsedMs(later: QuoteSnapshot?, earlier: QuoteSnapshot?): Long? {
-        val laterMs = later?.fetchedAtMs ?: return null
-        val earlierMs = earlier?.fetchedAtMs ?: return null
-        if (laterMs <= 0L || earlierMs <= 0L) return null
-        val elapsed = laterMs - earlierMs
-        return elapsed.takeIf { it > 0L }
-    }
-
-    private fun windowMatchesInterval(elapsedMs: Long, intervalSeconds: Long): Boolean {
-        val expectedMs = intervalSeconds * 1000.0
-        if (expectedMs <= 0.0) return false
-        val ratio = elapsedMs / expectedMs
-        return ratio >= WINDOW_MIN_RATIO && ratio <= WINDOW_MAX_RATIO
-    }
-
-    private fun windowsComparable(previousMs: Long, currentMs: Long): Boolean {
-        if (previousMs <= 0L || currentMs <= 0L) return false
-        val ratio = currentMs.toDouble() / previousMs
-        return ratio >= WINDOW_MIN_RATIO && ratio <= WINDOW_MAX_RATIO
-    }
-
-    private fun volumeDeltas(
+    private fun seriesFor(
+        code: String,
         current: QuoteSnapshot?,
         previous: QuoteSnapshot?,
-        older: QuoteSnapshot?
-    ): VolumeDeltas? {
-        val currentVol = numeric(current?.fields?.getOrNull(VOLUME_INDEX)) ?: return null
-        val previousVol = numeric(previous?.fields?.getOrNull(VOLUME_INDEX)) ?: return null
-        val olderVol = numeric(older?.fields?.getOrNull(VOLUME_INDEX)) ?: return null
-        val prevDelta = previousVol - olderVol
-        val currDelta = currentVol - previousVol
-        if (prevDelta <= 0.0 || currDelta < 0.0) return null
-        return VolumeDeltas(currDelta, prevDelta)
+        historyByCode: Map<String, List<QuoteSnapshot>>
+    ): List<QuoteSnapshot> {
+        val ticks = ArrayList<QuoteSnapshot>()
+        historyByCode[code]?.let { ticks.addAll(it) }
+        if (previous != null) ticks.add(previous)
+        if (current != null) ticks.add(current)
+        return ticks
+            .filter { it.fetchedAtMs >= 0L }
+            .distinctBy { it.fetchedAtMs }
+            .sortedBy { it.fetchedAtMs }
+    }
+
+    private fun volumeWindows(series: List<QuoteSnapshot>): VolumeWindows? {
+        val current = series.lastOrNull() ?: return null
+        val now = current.fetchedAtMs
+        val shortAnchor = nearestBefore(
+            series,
+            now,
+            VOLUME_SHORT_MS,
+            VOLUME_SHORT_MIN_MS,
+            VOLUME_SHORT_MAX_MS
+        ) ?: return null
+        val baselineAnchor = nearestBefore(
+            series,
+            now,
+            VOLUME_BASELINE_MS,
+            VOLUME_BASELINE_MIN_MS,
+            VOLUME_BASELINE_MAX_MS
+        ) ?: return null
+        if (baselineAnchor.fetchedAtMs >= shortAnchor.fetchedAtMs) return null
+        val currentVol = numeric(current.fields.getOrNull(VOLUME_INDEX)) ?: return null
+        val shortVol = numeric(shortAnchor.fields.getOrNull(VOLUME_INDEX)) ?: return null
+        val baselineVol = numeric(baselineAnchor.fields.getOrNull(VOLUME_INDEX)) ?: return null
+        val recent = currentVol - shortVol
+        val baseline = shortVol - baselineVol
+        if (recent < 0.0 || baseline < 0.0) return null
+        val recentMs = now - shortAnchor.fetchedAtMs
+        val baselineMs = shortAnchor.fetchedAtMs - baselineAnchor.fetchedAtMs
+        if (recentMs <= 0L || baselineMs <= 0L) return null
+        return VolumeWindows(recent, baseline, recentMs, baselineMs)
+    }
+
+    private fun nearestBefore(
+        series: List<QuoteSnapshot>,
+        nowMs: Long,
+        targetLookbackMs: Long,
+        minLookbackMs: Long,
+        maxLookbackMs: Long
+    ): QuoteSnapshot? {
+        if (nowMs < 0L) return null
+        val minMs = nowMs - maxLookbackMs
+        val maxMs = nowMs - minLookbackMs
+        val targetMs = nowMs - targetLookbackMs
+        return series
+            .filter { it.fetchedAtMs in minMs..maxMs }
+            .minByOrNull { kotlin.math.abs(it.fetchedAtMs - targetMs) }
     }
 
     private fun formatHands(value: Double): String {
@@ -314,7 +348,12 @@ object AlertEvaluator {
     }
 }
 
-private data class VolumeDeltas(
-    val current: Double,
-    val previous: Double
-)
+private data class VolumeWindows(
+    val recent: Double,
+    val baseline: Double,
+    val recentMs: Long,
+    val baselineMs: Long
+) {
+    val recentRate: Double get() = recent / recentMs
+    val baselineRate: Double get() = baseline / baselineMs
+}
