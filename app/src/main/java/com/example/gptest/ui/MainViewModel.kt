@@ -48,10 +48,17 @@ class MainViewModel(
     val events: SharedFlow<UiEvent> = monitor.events
 
     fun addCode(raw: String) = monitor.addCode(raw)
+    fun addCode(raw: String, tabId: String) = monitor.addCode(raw, tabId)
     fun removeCode(code: String) = monitor.removeCode(code)
+    fun removeCode(code: String, tabId: String) = monitor.removeCode(code, tabId)
     fun undoRemove() = monitor.undoRemove()
     fun reorder(codes: List<String>) = monitor.reorder(codes)
+    fun reorder(codes: List<String>, tabId: String) = monitor.reorder(codes, tabId)
     fun select(code: String) = monitor.select(code)
+    fun selectTab(tabId: String) = monitor.selectTab(tabId)
+    fun addTab(name: String) = monitor.addTab(name)
+    fun renameTab(tabId: String, name: String) = monitor.renameTab(tabId, name)
+    fun deleteTab(tabId: String) = monitor.deleteTab(tabId)
     fun setSortMode(mode: QuoteSortMode) = monitor.setSortMode(mode)
     fun toggleRaw() = monitor.toggleRaw()
     fun saveInterval(intervalText: String) = monitor.saveInterval(intervalText)

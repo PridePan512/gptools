@@ -4,10 +4,12 @@ import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.business.QuoteSortMode
 import com.example.gptest.business.TradingSession
 import com.example.gptest.data.AlertDataSource
+import com.example.gptest.data.InMemoryWatchlistStore
 import com.example.gptest.data.NoOpAlertDataSource
 import com.example.gptest.data.QuoteDataSource
 import com.example.gptest.data.SortModeStore
 import com.example.gptest.data.WatchlistDataSource
+import com.example.gptest.data.WatchlistTabs
 import com.example.gptest.ui.alert.AlertCondition
 import com.example.gptest.ui.alert.AlertFire
 import com.example.gptest.ui.alert.AlertMatchMode
@@ -431,6 +433,109 @@ class MainViewModelTest {
     }
 
     @Test
+    fun addTab_thenAddCode_goesToNewTab() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        assertEquals(WatchlistTabs.DEFAULT_ID, vm.uiState.value.selectedTabId)
+        assertEquals("自选股", vm.uiState.value.tabs.single().name)
+        vm.addTab("观察")
+        advanceUntilIdle()
+        val newId = vm.uiState.value.selectedTabId
+        assertEquals("观察", vm.uiState.value.tabs.single { it.id == newId }.name)
+        vm.addCode("000001")
+        advanceUntilIdle()
+        val state = vm.uiState.value
+        assertEquals(
+            emptyList<String>(),
+            state.tabs.first { it.id == WatchlistTabs.DEFAULT_ID }.rows.map { it.requestCode }
+        )
+        assertEquals(listOf("sz000001"), state.rows.map { it.requestCode })
+    }
+
+    @Test
+    fun sameCode_allowedAcrossTabs_duplicateInSameTab() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.addCode("000001")
+        advanceUntilIdle()
+        vm.addTab("观察")
+        advanceUntilIdle()
+        vm.addCode("000001")
+        advanceUntilIdle()
+        assertEquals(listOf("sz000001"), vm.uiState.value.rows.map { it.requestCode })
+        vm.addCode("sz000001")
+        advanceUntilIdle()
+        assertEquals(QuoteStatus.DuplicateCode, vm.uiState.value.status)
+        vm.selectTab(WatchlistTabs.DEFAULT_ID)
+        advanceUntilIdle()
+        assertEquals(listOf("sz000001"), vm.uiState.value.rows.map { it.requestCode })
+    }
+
+    @Test
+    fun removeFromOneTab_keepsCodeInOther() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        vm.addCode("000001")
+        vm.addTab("观察")
+        vm.addCode("000001")
+        advanceUntilIdle()
+        vm.removeCode("sz000001")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.rows.isEmpty())
+        vm.selectTab(WatchlistTabs.DEFAULT_ID)
+        advanceUntilIdle()
+        assertEquals(listOf("sz000001"), vm.uiState.value.rows.map { it.requestCode })
+    }
+
+    @Test
+    fun startPolling_usesUnion_whenCurrentTabEmpty() = runTest(dispatcher) {
+        val quotes = FakeQuotes(Result.success(listOf(snapshot("sz000001", "11.00", "1.50"))))
+        val vm = viewModel(quotes = quotes, clock = closedClock())
+        advanceUntilIdle()
+        vm.addTab("观察")
+        vm.addCode("000001")
+        vm.selectTab(WatchlistTabs.DEFAULT_ID)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.rows.isEmpty())
+        vm.startPolling("5")
+        advanceUntilIdle()
+        assertEquals(listOf("sz000001", "sh000001"), quotes.lastRequested)
+        assertEquals("11.00", vm.uiState.value.tabs.first { it.name == "观察" }.rows.single().price)
+    }
+
+    @Test
+    fun deleteTab_dropsItsStocksFromUnion() = runTest(dispatcher) {
+        val quotes = FakeQuotes(Result.success(listOf(snapshot("sz000002", "12.00", "1.00"))))
+        val vm = viewModel(quotes = quotes, clock = closedClock())
+        advanceUntilIdle()
+        vm.addTab("观察")
+        val groupId = vm.uiState.value.selectedTabId
+        vm.addCode("000002")
+        advanceUntilIdle()
+        vm.startPolling("5")
+        advanceUntilIdle()
+        assertTrue(quotes.lastRequested.contains("sz000002"))
+        vm.deleteTab(groupId)
+        advanceUntilIdle()
+        assertEquals(WatchlistTabs.DEFAULT_ID, vm.uiState.value.selectedTabId)
+        assertEquals(1, vm.uiState.value.tabs.size)
+    }
+
+    @Test
+    fun deleteDefaultTab_isDenied() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        val events = mutableListOf<UiEvent>()
+        val job = launch { vm.events.collect { events.add(it) } }
+        advanceUntilIdle()
+        vm.deleteTab(WatchlistTabs.DEFAULT_ID)
+        advanceUntilIdle()
+        job.cancel()
+        assertEquals(listOf(UiEvent.TabDeleteDenied), events)
+        assertEquals(1, vm.uiState.value.tabs.size)
+    }
+
+    @Test
     fun undoRemove_restoresCodeAtOriginalIndex() = runTest(dispatcher) {
         val store = FakeWatchlist(mutableListOf("sz000001", "sz000002", "sz000003"))
         val vm = viewModel(
@@ -457,7 +562,7 @@ class MainViewModelTest {
             listOf("sz000001", "sz000002", "sz000003"),
             vm.uiState.value.rows.map { it.requestCode }
         )
-        assertEquals(listOf("sz000001", "sz000002", "sz000003"), store.load())
+        assertEquals(listOf("sz000001", "sz000002", "sz000003"), store.load(WatchlistTabs.DEFAULT_ID))
         assertEquals("12.00", vm.uiState.value.rows[1].price)
     }
 
@@ -629,16 +734,8 @@ class MainViewModelTest {
     }
 
     private class FakeWatchlist(
-        private val codes: MutableList<String> = mutableListOf()
-    ) : WatchlistDataSource {
-        override fun load(): List<String> = codes.toList()
-        override fun add(code: String) { codes.add(code) }
-        override fun remove(code: String) { codes.remove(code) }
-        override fun reorder(codes: List<String>) {
-            this.codes.clear()
-            this.codes.addAll(codes)
-        }
-    }
+        codes: MutableList<String> = mutableListOf()
+    ) : WatchlistDataSource by InMemoryWatchlistStore(codes)
 
     private class FakeSortStore(
         override var mode: QuoteSortMode = QuoteSortMode.CUSTOM,

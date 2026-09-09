@@ -112,4 +112,14 @@
     <string name="quick_alert_added">已添加 %1$s</string>
     <string name="quick_alert_removed">已取消 %1$s</string>
     <string name="alert_condition_tap_edit">点按修改这条条件</string>
+    <string name="tab_add">添加分组</string>
+    <string name="tab_rename">重命名分组</string>
+    <string name="tab_delete">删除分组</string>
+    <string name="tab_name_hint">分组名称</string>
+    <string name="tab_name_invalid">请输入分组名称</string>
+    <string name="tab_limit_reached">最多 20 个分组</string>
+    <string name="tab_delete_denied">「自选股」不能删除</string>
+    <string name="tab_deleted">已删除分组 %1$s</string>
+    <string name="tab_delete_confirm">删除「%1$s」？该分组里的股票会一并移除，其他分组不受影响。</string>
+    <string name="tab_confirm">确定</string>
 </resources>

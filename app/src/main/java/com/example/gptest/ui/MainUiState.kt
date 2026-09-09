@@ -4,6 +4,7 @@ import com.example.gptest.business.QuoteCard
 import com.example.gptest.business.QuoteSnapshot
 import com.example.gptest.business.QuoteSortMode
 import com.example.gptest.business.TradingSession
+import com.example.gptest.data.WatchlistTabs
 import com.example.gptest.ui.alert.AlertOperator
 import com.example.gptest.ui.alert.RapidAlertThresholds
 
@@ -27,10 +28,24 @@ sealed interface UiEvent {
     data class OfferUndoDelete(val label: String) : UiEvent
     data class QuickAlertAdded(val label: String, val operator: AlertOperator) : UiEvent
     data class QuickAlertRemoved(val label: String, val operator: AlertOperator) : UiEvent
+    data class TabAdded(val id: String, val name: String) : UiEvent
+    data object TabNameInvalid : UiEvent
+    data object TabLimitReached : UiEvent
+    data object TabDeleteDenied : UiEvent
+    data class TabRemoved(val name: String) : UiEvent
 }
+
+data class WatchlistTabUi(
+    val id: String,
+    val name: String,
+    val locked: Boolean,
+    val rows: List<QuoteSnapshot>
+)
 
 data class MainUiState(
     val rows: List<QuoteSnapshot> = emptyList(),
+    val tabs: List<WatchlistTabUi> = emptyList(),
+    val selectedTabId: String = WatchlistTabs.DEFAULT_ID,
     val selectedCode: String? = null,
     val selectedCard: QuoteCard? = null,
     val sortMode: QuoteSortMode = QuoteSortMode.CUSTOM,

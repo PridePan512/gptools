@@ -119,6 +119,31 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.tabs.TabLayout
+                    android:id="@+id/tabWatchlists"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    app:tabGravity="start"
+                    app:tabMode="scrollable"
+                    app:tabRippleColor="@null" />
+
+                <ImageButton
+                    android:id="@+id/btnAddTab"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/tab_add"
+                    android:src="@drawable/ic_add" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:orientation="horizontal"
                 android:paddingStart="12dp"
                 android:paddingEnd="12dp">
@@ -152,14 +177,12 @@
                     android:textAppearance="?attr/textAppearanceCaption" />
             </LinearLayout>
 
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/rvQuoteList"
+            <androidx.viewpager2.widget.ViewPager2
+                android:id="@+id/pagerQuotes"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_marginTop="4dp"
-                android:layout_weight="1"
-                android:clipToPadding="false"
-                android:paddingBottom="88dp" />
+                android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>
 

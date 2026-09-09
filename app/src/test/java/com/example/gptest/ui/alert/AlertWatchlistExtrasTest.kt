@@ -30,4 +30,15 @@ class AlertWatchlistExtrasTest {
         assertEquals("600000", merged[0].name)
         assertEquals("通鼎互联", merged[1].name)
     }
+
+    @Test
+    fun fromQuotes_unionsRowsFromAllTabs() {
+        val rows = listOf(
+            QuoteSnapshot("sz000001", "平安银行", "11", "", emptyList()),
+            QuoteSnapshot("sz000001", "平安银行", "11", "", emptyList()),
+            QuoteSnapshot("sz000002", "万科A", "12", "", emptyList())
+        )
+        val stocks = AlertWatchlistExtras.fromQuotes(rows)
+        assertEquals(listOf("sz000001", "sz000002"), stocks.map { it.code })
+    }
 }

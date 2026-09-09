@@ -65,7 +65,7 @@ class AlertRulesActivity : AppCompatActivity() {
         val named = stocks.toList()
         lifecycleScope.launch {
             val codes = withContext(Dispatchers.IO) {
-                WatchlistStore(AppDatabase.get(this@AlertRulesActivity).watchlistDao()).load()
+                WatchlistStore(AppDatabase.get(this@AlertRulesActivity).watchlistDao()).allCodes()
             }
             stocks.clear()
             stocks.addAll(AlertWatchlistExtras.merge(codes, named))

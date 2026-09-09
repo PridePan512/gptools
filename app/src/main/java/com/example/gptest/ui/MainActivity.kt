@@ -21,9 +21,7 @@ import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.viewpager2.widget.ViewPager2
 import com.example.gptest.R
 import com.example.gptest.business.QuoteParser
 import com.example.gptest.business.QuoteSnapshot
@@ -38,16 +36,18 @@ import com.example.gptest.ui.alert.AlertWatchlistExtras
 import com.example.gptest.ui.alert.RapidAlertThresholds
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
+import com.google.android.material.tabs.TabLayoutMediator
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.format.DateTimeFormatter
-import java.util.Collections
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), QuoteTabHost {
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var quoteAdapter: QuoteListAdapter
+    private lateinit var pagerAdapter: QuotePagerAdapter
+    private var tabMediator: TabLayoutMediator? = null
+    private var syncingPager = false
     private var addStockDialog: AlertDialog? = null
     private var settingsDialog: AlertDialog? = null
     private var settingsIntervalInput: TextInputEditText? = null
@@ -72,8 +72,9 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
         setSupportActionBar(binding.toolbar)
         applyEdgeToEdgeInsets(binding.root, binding.toolbar, binding.content, binding.fabMonitor)
-        setupQuoteList()
+        setupPager()
         binding.btnSort.setOnClickListener { showSortMenu() }
+        binding.btnAddTab.setOnClickListener { showTabNameDialog(null) }
         binding.fabMonitor.setOnClickListener { toggleMonitor() }
         observeViewModel()
     }
@@ -131,6 +132,11 @@ class MainActivity : AppCompatActivity() {
                                 detailSheet?.unmarkOperator(event.operator)
                                 showMessage(getString(R.string.quick_alert_removed, event.label))
                             }
+                            is UiEvent.TabAdded -> Unit
+                            UiEvent.TabNameInvalid -> showMessage(getString(R.string.tab_name_invalid))
+                            UiEvent.TabLimitReached -> showMessage(getString(R.string.tab_limit_reached))
+                            UiEvent.TabDeleteDenied -> showMessage(getString(R.string.tab_delete_denied))
+                            is UiEvent.TabRemoved -> showMessage(getString(R.string.tab_deleted, event.name))
                         }
                     }
                 }
@@ -150,7 +156,7 @@ class MainActivity : AppCompatActivity() {
         bindStatus(state.status)
         bindLastUpdated(state.lastUpdatedMs)
         bindShanghaiIndex(state.shanghaiIndex)
-        quoteAdapter.submit(state.rows, state.dragEnabled)
+        bindTabs(state)
         detailSheet?.bind(state)
     }
 
@@ -205,7 +211,7 @@ class MainActivity : AppCompatActivity() {
         applyChangeColor(binding.tvIndexChange, quote?.changePercent.orEmpty())
     }
 
-    private fun openQuoteDetail(code: String) {
+    override fun openQuoteDetail(code: String) {
         val sheet = detailSheet ?: QuoteDetailSheet(this) { detailSheet = null }.also { detailSheet = it }
         sheet.show(code)
     }
@@ -223,7 +229,7 @@ class MainActivity : AppCompatActivity() {
         startActivity(
             AlertWatchlistExtras.put(
                 Intent(this, AlertRulesActivity::class.java),
-                AlertWatchlistExtras.fromQuotes(viewModel.uiState.value.rows)
+                AlertWatchlistExtras.fromQuotes(viewModel.uiState.value.tabs.flatMap { it.rows })
             )
         )
     }
@@ -387,62 +393,89 @@ class MainActivity : AppCompatActivity() {
         }.show()
     }
 
-    private fun setupQuoteList() {
-        quoteAdapter = QuoteListAdapter(
-            onClick = { quote -> openQuoteDetail(quote.requestCode) },
-            onDelete = { code -> viewModel.removeCode(code) },
-            onStartDrag = { holder ->
-                itemTouchHelper.startDrag(holder)
-            },
-            applyChangeColor = { view, change -> applyChangeColor(view, change) }
-        )
-        binding.rvQuoteList.layoutManager = LinearLayoutManager(this)
-        binding.rvQuoteList.adapter = quoteAdapter
-        itemTouchHelper.attachToRecyclerView(binding.rvQuoteList)
+    private fun setupPager() {
+        pagerAdapter = QuotePagerAdapter(this)
+        binding.pagerQuotes.adapter = pagerAdapter
+        binding.pagerQuotes.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                if (syncingPager) return
+                val tabId = pagerAdapter.idAt(position)
+                if (tabId.isNotEmpty()) viewModel.selectTab(tabId)
+            }
+        })
     }
 
-    private val itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
-        ItemTouchHelper.UP or ItemTouchHelper.DOWN,
-        0
-    ) {
-        override fun isLongPressDragEnabled(): Boolean = false
-
-        override fun getMovementFlags(
-            recyclerView: RecyclerView,
-            viewHolder: RecyclerView.ViewHolder
-        ): Int {
-            val dragFlags = if (quoteAdapter.dragEnabled) {
-                ItemTouchHelper.UP or ItemTouchHelper.DOWN
-            } else {
-                0
-            }
-            return makeMovementFlags(dragFlags, 0)
-        }
-
-        override fun onMove(
-            recyclerView: RecyclerView,
-            viewHolder: RecyclerView.ViewHolder,
-            target: RecyclerView.ViewHolder
-        ): Boolean {
-            val from = viewHolder.bindingAdapterPosition
-            val to = target.bindingAdapterPosition
-            if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) {
-                return false
-            }
-            Collections.swap(quoteAdapter.items, from, to)
-            quoteAdapter.notifyItemMoved(from, to)
-            return true
-        }
-
-        override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) = Unit
-
-        override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
-            super.clearView(recyclerView, viewHolder)
-            if (quoteAdapter.dragEnabled) {
-                viewModel.reorder(quoteAdapter.items.map { it.quote.requestCode })
+    private fun bindTabs(state: MainUiState) {
+        val idsChanged = pagerAdapter.submit(state.tabs)
+        if (idsChanged || tabMediator == null) {
+            attachTabMediator()
+        } else {
+            for (index in 0 until binding.tabWatchlists.tabCount) {
+                binding.tabWatchlists.getTabAt(index)?.text = pagerAdapter.titleAt(index)
             }
         }
-    })
+        val index = pagerAdapter.indexOf(state.selectedTabId)
+        if (index >= 0 && binding.pagerQuotes.currentItem != index) {
+            syncingPager = true
+            binding.pagerQuotes.setCurrentItem(index, false)
+            syncingPager = false
+        }
+    }
+
+    private fun attachTabMediator() {
+        tabMediator?.detach()
+        tabMediator = TabLayoutMediator(binding.tabWatchlists, binding.pagerQuotes) { tab, position ->
+            tab.text = pagerAdapter.titleAt(position)
+            val tabId = pagerAdapter.idAt(position)
+            tab.view.setOnLongClickListener {
+                showTabActions(tabId)
+                true
+            }
+        }.also { it.attach() }
+    }
+
+    private fun showTabActions(tabId: String) {
+        val tab = viewModel.uiState.value.tabs.find { it.id == tabId } ?: return
+        val options = if (tab.locked) {
+            arrayOf(getString(R.string.tab_rename))
+        } else {
+            arrayOf(getString(R.string.tab_rename), getString(R.string.tab_delete))
+        }
+        MaterialAlertDialogBuilder(this)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showTabNameDialog(tabId)
+                    1 -> confirmDeleteTab(tab)
+                }
+            }
+            .show()
+    }
+
+    private fun showTabNameDialog(tabId: String?) {
+        val view = layoutInflater.inflate(R.layout.dialog_tab_name, null)
+        val input = view.findViewById<TextInputEditText>(R.id.etTabName)
+        val existing = tabId?.let { id -> viewModel.uiState.value.tabs.find { it.id == id } }
+        input.setText(existing?.name.orEmpty())
+        input.setSelection(input.text?.length ?: 0)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(if (tabId == null) R.string.tab_add else R.string.tab_rename)
+            .setView(view)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.tab_confirm) { _, _ ->
+                val name = input.text?.toString().orEmpty()
+                if (tabId == null) viewModel.addTab(name) else viewModel.renameTab(tabId, name)
+            }
+            .show()
+        input.requestFocus()
+    }
+
+    private fun confirmDeleteTab(tab: WatchlistTabUi) {
+        MaterialAlertDialogBuilder(this)
+            .setMessage(getString(R.string.tab_delete_confirm, tab.name))
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.tab_delete) { _, _ -> viewModel.deleteTab(tab.id) }
+            .show()
+    }
 
     private fun showSortMenu() {
         PopupMenu(this, binding.btnSort).apply {
@@ -478,6 +511,10 @@ class MainActivity : AppCompatActivity() {
             TradingSession.Phase.CLOSED -> getString(R.string.status_closed_once)
             TradingSession.Phase.OPEN -> null
         }
+    }
+
+    override fun applyQuoteChangeColor(view: TextView, changePercent: String) {
+        applyChangeColor(view, changePercent)
     }
 
     private fun applyChangeColor(view: TextView, changePercent: String) {

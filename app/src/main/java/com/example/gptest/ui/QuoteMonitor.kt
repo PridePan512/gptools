@@ -11,6 +11,8 @@ import com.example.gptest.data.NoOpAlertDataSource
 import com.example.gptest.data.QuoteDataSource
 import com.example.gptest.data.SortModeStore
 import com.example.gptest.data.WatchlistDataSource
+import com.example.gptest.data.WatchlistTab
+import com.example.gptest.data.WatchlistTabs
 import com.example.gptest.ui.alert.AlertEvaluator
 import com.example.gptest.ui.alert.AlertNotifier
 import com.example.gptest.ui.alert.AlertOperator
@@ -44,7 +46,8 @@ class QuoteMonitor(
     private val alertNotifier: AlertNotifier = NoOpAlertNotifier
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val watchlist = mutableListOf<String>()
+    private val tabs = mutableListOf<TabState>()
+    private var selectedTabId: String = WatchlistTabs.DEFAULT_ID
     private var quotes: List<QuoteSnapshot> = emptyList()
     private var previousQuotes: List<QuoteSnapshot> = emptyList()
     private var selectedCode: String? = null
@@ -69,15 +72,86 @@ class QuoteMonitor(
 
     init {
         scope.launch {
-            val codes = withContext(ioDispatcher) { watchlistDataSource.load() }
-            watchlist.clear()
-            watchlist.addAll(codes)
+            val loaded = withContext(ioDispatcher) {
+                watchlistDataSource.loadTabs().map { tab ->
+                    tab to watchlistDataSource.load(tab.id)
+                }
+            }
+            tabs.clear()
+            loaded.forEach { (tab, codes) ->
+                tabs.add(TabState.from(tab, codes))
+            }
+            if (tabs.none { it.id == WatchlistTabs.DEFAULT_ID }) {
+                tabs.add(0, TabState.from(WatchlistTabs.defaultTab(), emptyList()))
+            }
+            selectedTabId = WatchlistTabs.DEFAULT_ID
             watchlistLoaded = true
             publish()
         }
     }
 
-    fun addCode(raw: String) {
+    fun selectTab(tabId: String) {
+        if (tabs.none { it.id == tabId }) return
+        selectedTabId = tabId
+        publish()
+    }
+
+    fun addTab(rawName: String) {
+        val name = WatchlistTabs.normalizeName(rawName) ?: run {
+            _events.tryEmit(UiEvent.TabNameInvalid)
+            return
+        }
+        if (tabs.size >= WatchlistTabs.MAX_TABS) {
+            _events.tryEmit(UiEvent.TabLimitReached)
+            return
+        }
+        val tab = WatchlistTab(
+            id = WatchlistTabs.newId(),
+            name = name,
+            locked = false,
+            sortOrder = tabs.size
+        )
+        tabs.add(TabState.from(tab, emptyList()))
+        selectedTabId = tab.id
+        persist { watchlistDataSource.addTab(tab) }
+        _events.tryEmit(UiEvent.TabAdded(tab.id, name))
+        publish()
+    }
+
+    fun renameTab(tabId: String, rawName: String) {
+        val name = WatchlistTabs.normalizeName(rawName) ?: run {
+            _events.tryEmit(UiEvent.TabNameInvalid)
+            return
+        }
+        val tab = tabs.find { it.id == tabId } ?: return
+        tab.name = name
+        persist { watchlistDataSource.renameTab(tabId, name) }
+        publish()
+    }
+
+    fun deleteTab(tabId: String) {
+        val index = tabs.indexOfFirst { it.id == tabId }
+        if (index < 0) return
+        val tab = tabs[index]
+        if (tab.locked) {
+            _events.tryEmit(UiEvent.TabDeleteDenied)
+            return
+        }
+        tabs.removeAt(index)
+        if (selectedTabId == tabId) {
+            selectedTabId = WatchlistTabs.DEFAULT_ID
+        }
+        persist { watchlistDataSource.deleteTab(tabId) }
+        _events.tryEmit(UiEvent.TabRemoved(tab.name))
+        if (allCodes().isEmpty() && isRunning) {
+            stopPolling()
+            return
+        }
+        publish()
+        if (isRunning && TradingSession.isOpen(clock)) refreshQuotesNow()
+    }
+
+    fun addCode(raw: String, tabId: String = selectedTabId) {
         if (raw.trim().isEmpty()) {
             _events.tryEmit(UiEvent.AddEmptyCode)
             return
@@ -88,14 +162,15 @@ class QuoteMonitor(
             publish()
             return
         }
-        if (watchlist.contains(code)) {
+        val tab = tabById(tabId) ?: return
+        if (tab.codes.contains(code)) {
             status = QuoteStatus.DuplicateCode
             _events.tryEmit(UiEvent.AddDuplicateCode)
             publish()
             return
         }
-        watchlist.add(code)
-        persist { watchlistDataSource.add(code) }
+        tab.codes.add(code)
+        persist { watchlistDataSource.add(tab.id, code) }
         val label = code.removePrefix("sz").removePrefix("sh").removePrefix("bj")
         _events.tryEmit(UiEvent.AddSucceeded(label))
         publish()
@@ -104,23 +179,27 @@ class QuoteMonitor(
         }
     }
 
-    fun removeCode(code: String) {
-        val index = watchlist.indexOf(code)
+    fun removeCode(code: String, tabId: String = selectedTabId) {
+        val tab = tabById(tabId) ?: return
+        val index = tab.codes.indexOf(code)
         if (index < 0) return
         val quote = quotes.find { it.requestCode == code }
         pendingUndo = PendingUndo(
+            tabId = tab.id,
             index = index,
             code = code,
             quote = quote,
             selected = selectedCode == code
         )
-        watchlist.removeAt(index)
-        persist { watchlistDataSource.remove(code) }
-        quotes = quotes.filter { it.requestCode != code }
-        if (selectedCode == code) selectedCode = null
+        tab.codes.removeAt(index)
+        persist { watchlistDataSource.remove(tab.id, code) }
+        if (!allCodes().contains(code)) {
+            quotes = quotes.filter { it.requestCode != code }
+            if (selectedCode == code) selectedCode = null
+        }
         _events.tryEmit(UiEvent.OfferUndoDelete(undoLabel(quote, code)))
         publish()
-        if (watchlist.isEmpty()) {
+        if (allCodes().isEmpty()) {
             if (isRunning) stopPolling()
             return
         }
@@ -130,26 +209,28 @@ class QuoteMonitor(
     fun undoRemove() {
         val deleted = pendingUndo ?: return
         pendingUndo = null
-        if (watchlist.contains(deleted.code)) return
-        val index = deleted.index.coerceIn(0, watchlist.size)
-        watchlist.add(index, deleted.code)
-        if (deleted.quote != null) {
+        val tab = tabById(deleted.tabId) ?: return
+        if (tab.codes.contains(deleted.code)) return
+        val index = deleted.index.coerceIn(0, tab.codes.size)
+        tab.codes.add(index, deleted.code)
+        if (deleted.quote != null && quotes.none { it.requestCode == deleted.code }) {
             quotes = quotes + deleted.quote
         }
         if (deleted.selected) selectedCode = deleted.code
         persist {
-            watchlistDataSource.add(deleted.code)
-            watchlistDataSource.reorder(watchlist.toList())
+            watchlistDataSource.add(tab.id, deleted.code)
+            watchlistDataSource.reorder(tab.id, tab.codes.toList())
         }
         publish()
         if (isRunning && TradingSession.isOpen(clock)) refreshQuotesNow()
     }
 
-    fun reorder(codes: List<String>) {
+    fun reorder(codes: List<String>, tabId: String = selectedTabId) {
         if (sortMode != QuoteSortMode.CUSTOM) return
-        watchlist.clear()
-        watchlist.addAll(codes)
-        persist { watchlistDataSource.reorder(codes) }
+        val tab = tabById(tabId) ?: return
+        tab.codes.clear()
+        tab.codes.addAll(codes)
+        persist { watchlistDataSource.reorder(tab.id, codes) }
         publish()
     }
 
@@ -218,7 +299,7 @@ class QuoteMonitor(
 
     fun startPolling(intervalText: String) {
         saveInterval(intervalText)
-        if (watchlist.isEmpty()) {
+        if (allCodes().isEmpty()) {
             status = QuoteStatus.EmptyWatchlist
             sortModeStore.monitorRunning = false
             publish()
@@ -266,7 +347,7 @@ class QuoteMonitor(
                 shanghaiIndex = stamped.find { it.requestCode == QuoteParser.SHANGHAI_INDEX_CODE } ?: shanghaiIndex
                 quotes = stamped.filter {
                     it.requestCode != QuoteParser.SHANGHAI_INDEX_CODE ||
-                        watchlist.contains(QuoteParser.SHANGHAI_INDEX_CODE)
+                        allCodes().contains(QuoteParser.SHANGHAI_INDEX_CODE)
                 }
                 previousQuotes = previous
                 lastUpdatedMs = fetchedAtMs
@@ -356,7 +437,7 @@ class QuoteMonitor(
     }
 
     private fun fetchCodes(): List<String> {
-        val codes = watchlist.toList()
+        val codes = allCodes()
         if (codes.isEmpty()) return emptyList()
         return if (codes.contains(QuoteParser.SHANGHAI_INDEX_CODE)) {
             codes
@@ -374,14 +455,25 @@ class QuoteMonitor(
     }
 
     private fun buildState(): MainUiState {
-        val rows = displayRows()
-        if (selectedCode != null && rows.none { it.requestCode == selectedCode }) {
+        val tabUis = tabs.map { tab ->
+            WatchlistTabUi(
+                id = tab.id,
+                name = tab.name,
+                locked = tab.locked,
+                rows = displayRows(tab.codes)
+            )
+        }
+        val current = tabUis.find { it.id == selectedTabId } ?: tabUis.firstOrNull()
+        val rows = current?.rows.orEmpty()
+        if (selectedCode != null && tabUis.none { ui -> ui.rows.any { it.requestCode == selectedCode } }) {
             selectedCode = null
         }
         val selected = selectedCode
         val quote = quotes.find { it.requestCode == selected }
         return MainUiState(
             rows = rows,
+            tabs = tabUis,
+            selectedTabId = current?.id ?: WatchlistTabs.DEFAULT_ID,
             selectedCode = selected,
             selectedCard = quote?.let { QuoteCardMapper.from(it) },
             sortMode = sortMode,
@@ -397,9 +489,9 @@ class QuoteMonitor(
         )
     }
 
-    private fun displayRows(): List<QuoteSnapshot> {
+    private fun displayRows(codes: List<String>): List<QuoteSnapshot> {
         val byCode = quotes.associateBy { it.requestCode }
-        val rows = watchlist.map { code ->
+        val rows = codes.map { code ->
             byCode[code] ?: QuoteSnapshot(
                 requestCode = code,
                 name = "--",
@@ -408,8 +500,16 @@ class QuoteMonitor(
                 fields = emptyList()
             )
         }
-        return QuoteSorter.sort(rows, sortMode, watchlist.toList())
+        return QuoteSorter.sort(rows, sortMode, codes)
     }
+
+    private fun allCodes(): List<String> {
+        val seen = LinkedHashSet<String>()
+        tabs.forEach { tab -> tab.codes.forEach { seen.add(it) } }
+        return seen.toList()
+    }
+
+    private fun tabById(tabId: String): TabState? = tabs.find { it.id == tabId }
 
     private fun undoLabel(quote: QuoteSnapshot?, code: String): String {
         val name = quote?.name?.trim().orEmpty()
@@ -420,9 +520,23 @@ class QuoteMonitor(
     }
 
     private data class PendingUndo(
+        val tabId: String,
         val index: Int,
         val code: String,
         val quote: QuoteSnapshot?,
         val selected: Boolean
     )
+
+    private class TabState(
+        val id: String,
+        var name: String,
+        val locked: Boolean,
+        val codes: MutableList<String>
+    ) {
+        companion object {
+            fun from(tab: WatchlistTab, codes: List<String>): TabState {
+                return TabState(tab.id, tab.name, tab.locked, codes.toMutableList())
+            }
+        }
+    }
 }
