@@ -270,6 +270,7 @@ class QuoteMonitor(
 
     fun addQuickAlert(code: String, operator: AlertOperator) {
         if (operator.needsValue) return
+        if (operator !in AlertQuickAdd.availableOperators(code)) return
         scope.launch {
             val event = withContext(ioDispatcher) { addQuickAlertBlocking(code, operator) }
             _events.tryEmit(event)

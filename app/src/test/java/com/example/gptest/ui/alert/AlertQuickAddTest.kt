@@ -27,6 +27,20 @@ class AlertQuickAddTest {
     }
 
     @Test
+    fun availableOperators_hidesBoardLimitsForIndex() {
+        assertEquals(
+            listOf(
+                AlertOperator.VOLUME_SURGE,
+                AlertOperator.VOLUME_SHRINK,
+                AlertOperator.PRICE_SURGE,
+                AlertOperator.PRICE_DROP
+            ),
+            AlertQuickAdd.availableOperators("sh000001")
+        )
+        assertEquals(AlertQuickAdd.operators, AlertQuickAdd.availableOperators("sz000001"))
+    }
+
+    @Test
     fun createRule_usesCooldownAndSentenceName() {
         val rule = AlertQuickAdd.createRule(stock, AlertOperator.PRICE_SURGE)
         assertEquals("通鼎互联  快速拉升", rule.name)

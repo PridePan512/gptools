@@ -6,6 +6,12 @@ data class StockCatalogEntry(
 ) {
     val displayLabel: String
         get() = "$name  ${code.drop(2)}"
+
+    val isIndex: Boolean
+        get() = StockCatalog.isIndex(code)
+
+    val isEtf: Boolean
+        get() = StockCatalog.isEtf(code, name)
 }
 
 class StockCatalog(private val entries: List<StockCatalogEntry>) {
@@ -19,12 +25,24 @@ class StockCatalog(private val entries: List<StockCatalogEntry>) {
         return entries.mapNotNull { entry ->
             val rank = rank(entry, needleLower, needleCompact, needleDigits) ?: return@mapNotNull null
             rank to entry
-        }.sortedWith(compareBy({ it.first }, { it.second.code }))
+        }.sortedWith(
+            compareBy(
+                { it.first },
+                { kindRank(it.second) },
+                { it.second.code }
+            )
+        )
             .take(limit)
             .map { it.second }
     }
 
-    fun resolveUnique(query: String): String? = search(query, limit = 2).singleOrNull()?.code
+    fun resolveUnique(query: String): String? {
+        val hits = search(query, limit = DEFAULT_LIMIT)
+        val needle = compact(query.trim().lowercase())
+        val exact = hits.filter { compact(it.name.lowercase()) == needle }
+        if (exact.size == 1) return exact.single().code
+        return hits.singleOrNull()?.code
+    }
 
     fun resolveAddQuery(raw: String): String? {
         val query = raw.trim()
@@ -50,6 +68,12 @@ class StockCatalog(private val entries: List<StockCatalogEntry>) {
         }
     }
 
+    private fun kindRank(entry: StockCatalogEntry): Int = when {
+        entry.isIndex -> 0
+        entry.isEtf -> 2
+        else -> 1
+    }
+
     companion object {
         const val DEFAULT_LIMIT = 8
         private const val RANK_EXACT_NAME = 0
@@ -70,6 +94,24 @@ class StockCatalog(private val entries: List<StockCatalogEntry>) {
                 StockCatalogEntry(code, name)
             }.toList()
             return StockCatalog(parsed)
+        }
+
+        fun isIndex(code: String): Boolean {
+            val normalized = code.lowercase()
+            return normalized.startsWith("sh000") ||
+                normalized.startsWith("sz399") ||
+                normalized.startsWith("bj899")
+        }
+
+        fun isEtf(code: String, name: String): Boolean {
+            if (name.contains("ETF", ignoreCase = true)) return true
+            val digits = code.drop(2)
+            return when {
+                code.startsWith("sh") &&
+                    (digits.startsWith("51") || digits.startsWith("56") || digits.startsWith("58")) -> true
+                code.startsWith("sz") && digits.startsWith("15") -> true
+                else -> false
+            }
         }
 
         private fun stripMarketPrefix(value: String): String {

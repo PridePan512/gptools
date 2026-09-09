@@ -48,6 +48,48 @@ class StockCatalogTest {
     }
 
     @Test
+    fun search_ranksStocksBeforeEtfsWithSameMatch() {
+        val catalog = StockCatalog.parse(
+            """
+            sh510050|测试ETF华夏
+            sz159919|测试ETF易方达
+            sz000001|测试银行
+            sh601318|测试集团
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf("sh601318", "sz000001", "sh510050", "sz159919"),
+            catalog.search("测试").map { it.code }
+        )
+    }
+
+    @Test
+    fun search_ranksCodeBasedEtfAfterStocks() {
+        val catalog = StockCatalog.parse(
+            """
+            sh510010|180治理交银
+            sz000001|180股份
+            """.trimIndent()
+        )
+        assertEquals(listOf("sz000001", "sh510010"), catalog.search("180").map { it.code })
+    }
+
+    @Test
+    fun search_ranksIndicesThenStocksThenEtfs() {
+        val catalog = StockCatalog.parse(
+            """
+            sh510300|沪深300ETF华泰柏瑞
+            sh000300|沪深300
+            sz000001|沪深银行
+            """.trimIndent()
+        )
+        assertEquals(
+            listOf("sh000300", "sz000001", "sh510300"),
+            catalog.search("沪深").map { it.code }
+        )
+    }
+
+    @Test
     fun search_ranksExactNameBeforeContains() {
         val results = catalog.search("平安")
         assertEquals(listOf("sz000001", "sh601318"), results.map { it.code })
@@ -118,6 +160,21 @@ class StockCatalogTest {
         assertTrue(catalog.search("沪深300ETF").isNotEmpty())
         assertEquals("sz002165", catalog.resolveUnique("红宝丽"))
         assertTrue(catalog.search("红宝").any { it.code == "sz002165" })
+        assertEquals("sh000001", catalog.resolveUnique("上证指数"))
+        assertEquals("sz399006", catalog.resolveUnique("创业板指"))
+        assertEquals("sh000300", catalog.resolveAddQuery("沪深300"))
+        val hs300 = catalog.search("沪深300").map { it.code }
+        assertTrue(hs300.first() == "sh000300")
+        assertTrue(hs300.any { it.startsWith("sh51") || it.startsWith("sz15") })
+    }
+
+    @Test
+    fun isIndex_usesShanghaiAndShenzhenIndexCodes() {
+        assertTrue(StockCatalog.isIndex("sh000001"))
+        assertTrue(StockCatalog.isIndex("sz399006"))
+        assertTrue(StockCatalog.isIndex("bj899050"))
+        assertTrue(!StockCatalog.isIndex("sz000001"))
+        assertTrue(!StockCatalog.isIndex("sh510300"))
     }
 
     @Test

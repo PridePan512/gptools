@@ -1,7 +1,16 @@
 package com.example.gptest.ui.alert
 
+import com.example.gptest.business.StockCatalog
+
 object AlertQuickAdd {
     val operators: List<AlertOperator> = AlertOperator.entries.filter { !it.needsValue }
+
+    fun availableOperators(code: String): List<AlertOperator> {
+        if (StockCatalog.isIndex(code)) {
+            return operators.filter { !BOARD_LIMIT_OPERATORS.contains(it) }
+        }
+        return operators
+    }
 
     fun createRule(stock: AlertStockOption, operator: AlertOperator): AlertRule {
         val condition = AlertCondition(
@@ -47,4 +56,11 @@ object AlertQuickAdd {
             rule.conditions.any { it.stock.code == stockCode && it.operator == operator }
         }.map { it.id }
     }
+
+    private val BOARD_LIMIT_OPERATORS = setOf(
+        AlertOperator.LIMIT_UP,
+        AlertOperator.LIMIT_DOWN,
+        AlertOperator.OPEN_LIMIT_UP,
+        AlertOperator.OPEN_LIMIT_DOWN
+    )
 }

@@ -1,6 +1,7 @@
 package com.example.gptest.ui
 
 import android.content.Context
+import android.view.View
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
@@ -68,6 +69,7 @@ class QuoteDetailSheet(
         val quote = state.rows.find { it.requestCode == code }
         val card = quote?.let { QuoteCardMapper.from(it) }
         QuoteCardBinder.bind(context, binding.quoteCard, card, rawExpanded)
+        bindChipVisibility()
         bindChipChecks()
     }
 
@@ -95,6 +97,16 @@ class QuoteDetailSheet(
         }
     }
 
+    private fun bindChipVisibility() {
+        val code = requestCode
+        val allowed = if (code == null) emptySet() else AlertQuickAdd.availableOperators(code).toSet()
+        for (index in 0 until binding.chipQuickAlerts.childCount) {
+            val chip = binding.chipQuickAlerts.getChildAt(index) as? Chip ?: continue
+            val operator = chip.tag as? AlertOperator ?: continue
+            chip.visibility = if (operator in allowed) View.VISIBLE else View.GONE
+        }
+    }
+
     private fun bindChipChecks() {
         for (index in 0 until binding.chipQuickAlerts.childCount) {
             val chip = binding.chipQuickAlerts.getChildAt(index) as? Chip ?: continue
@@ -112,6 +124,7 @@ class QuoteDetailSheet(
     private fun toggleQuickAlert(operator: AlertOperator) {
         val code = requestCode ?: return
         if (!chipsReady) return
+        if (operator !in AlertQuickAdd.availableOperators(code)) return
         val removing = operator in existingOperators
         if (!removing) {
             (context as? FragmentActivity)?.let { AlertNotificationPermission.requestIfNeeded(it) }
