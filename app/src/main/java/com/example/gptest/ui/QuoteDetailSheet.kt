@@ -2,6 +2,10 @@ package com.example.gptest.ui
 
 import android.content.Context
 import android.view.View
+import android.widget.LinearLayout
+import android.widget.TextView
+import com.example.gptest.business.MovingAverageCalculator
+import com.google.android.material.card.MaterialCardView
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import com.example.gptest.business.QuoteCardMapper
@@ -33,7 +37,7 @@ class QuoteDetailSheet(
             historyJob?.cancel()
             onDismiss()
         }
-        binding.btnRetryHistory.setOnClickListener { requestCode?.let { loadHistory(it) } }
+        binding.quoteCard.btnRetryHistory.setOnClickListener { requestCode?.let { loadHistory(it) } }
         binding.quoteCard.tvToggleRaw.setOnClickListener {
             rawExpanded = !rawExpanded
             bind(QuoteMonitorHolder.get(context).uiState.value)
@@ -61,27 +65,67 @@ class QuoteDetailSheet(
 
     private fun loadHistory(code: String) {
         historyJob?.cancel()
-        binding.tvMovingAverages.text = context.getString(R.string.history_loading)
-        binding.tvHistoryInfo.text = ""
-        binding.btnRetryHistory.visibility = View.GONE
+        binding.quoteCard.tvMovingAverages.text = context.getString(R.string.history_loading)
+        binding.quoteCard.tvMovingAverages.visibility = View.VISIBLE
+        binding.quoteCard.maGrid.removeAllViews()
+        binding.quoteCard.tvHistoryInfo.text = ""
+        binding.quoteCard.btnRetryHistory.visibility = View.GONE
         val owner = context as? LifecycleOwner ?: return
         historyJob = owner.lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) { historyRepository.fetchAverages(code) }
+            val result = withContext(Dispatchers.IO) { historyRepository.fetchDaily(code) }
             if (requestCode != code) return@launch
             result.onSuccess { history ->
-                val labels = listOf(R.string.ma5_label, R.string.ma10_label, R.string.ma20_label, R.string.ma250_label)
-                binding.tvMovingAverages.text = history.averages.values.entries.mapIndexed { index, entry ->
-                    val value = entry.value?.let { String.format(Locale.CHINA, "%.2f", it) }
-                        ?: context.getString(R.string.history_insufficient)
-                    "${context.getString(labels[index])}：$value"
-                }.joinToString("\n")
+                val averages = MovingAverageCalculator.calculate(history.closes)
+                val snapshotPrice = history.closes.maxBy { it.date }.close
+                binding.quoteCard.tvMovingAverages.visibility = View.GONE
+                val labels = listOf(R.string.ma5_label, R.string.ma10_label, R.string.ma20_label,
+                    R.string.ma60_label, R.string.ma120_label, R.string.ma250_label)
+                averages.values.entries.toList().chunked(2).forEachIndexed { rowIndex, entries ->
+                    val row = LinearLayout(context)
+                    entries.forEachIndexed { column, entry ->
+                        val tile = MaterialCardView(context).apply {
+                            radius = dp(12).toFloat()
+                            cardElevation = 0f
+                            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                                setMargins(0, dp(4), if (column == 0) dp(8) else 0, dp(4))
+                            }
+                        }
+                        tile.addView(LinearLayout(context).apply {
+                            orientation = LinearLayout.VERTICAL
+                            setPadding(dp(12), dp(12), dp(12), dp(12))
+                            addView(TextView(context).apply {
+                                setText(labels[rowIndex * 2 + column])
+                                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_LabelMedium)
+                            })
+                            addView(TextView(context).apply {
+                                text = entry.value?.let { String.format(Locale.CHINA, "%.2f", it) }
+                                    ?: context.getString(R.string.history_insufficient)
+                                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleLarge)
+                            })
+                            addView(TextView(context).apply {
+                                val value = entry.value
+                                text = if (value == null) context.getString(R.string.ma_no_comparison)
+                                    else context.getString(when {
+                                        snapshotPrice > value -> R.string.ma_above
+                                        snapshotPrice < value -> R.string.ma_below
+                                        else -> R.string.ma_equal
+                                    })
+                                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
+                            })
+                        })
+                        row.addView(tile)
+                    }
+                    binding.quoteCard.maGrid.addView(row)
+                }
                 val adjustment = context.getString(if (history.forwardAdjusted) R.string.history_qfq else R.string.history_unadjusted)
-                binding.tvHistoryInfo.text = context.getString(R.string.history_info, history.averages.date.toString(), adjustment)
+                binding.quoteCard.tvHistoryInfo.text = context.getString(R.string.history_info, averages.date.toString(), adjustment)
             }.onFailure {
-                binding.tvMovingAverages.setText(R.string.history_failed)
-                binding.btnRetryHistory.visibility = View.VISIBLE
+                binding.quoteCard.tvMovingAverages.setText(R.string.history_failed)
+                binding.quoteCard.btnRetryHistory.visibility = View.VISIBLE
             }
         }
     }
+
+    private fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
 
 }

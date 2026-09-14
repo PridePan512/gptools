@@ -27,9 +27,9 @@ class QuickAlertDialog(
     private val builder = MaterialAlertDialogBuilder(activity)
     private val binding = DialogQuickAlertsBinding.inflate(android.view.LayoutInflater.from(builder.context))
     private val dialog = builder
-        .setTitle(activity.getString(R.string.quick_alert_dialog_title, name, code))
+        .setTitle(R.string.quick_alert_title)
         .setView(binding.root)
-        .setPositiveButton(android.R.string.ok, null)
+        .setPositiveButton(R.string.done, null)
         .create()
     private var loadJob: Job? = null
     private var selected: Set<AlertOperator> = emptySet()
@@ -37,6 +37,11 @@ class QuickAlertDialog(
     private val buttons = mutableMapOf<AlertOperator, MaterialButton>()
 
     init {
+        binding.tvAlertStock.text = "$name · ${code.uppercase()}"
+        binding.btnRuleHelp.setOnClickListener {
+            MaterialAlertDialogBuilder(activity).setTitle(R.string.rule_help)
+                .setMessage(R.string.quick_alert_help).setPositiveButton(R.string.done, null).show()
+        }
         val available = AlertQuickAdd.availableOperators(code)
         addGroup(R.string.quick_group_ma, available.filter { it.maPeriod != null })
         addGroup(R.string.quick_group_board, available.filter { it in setOf(
@@ -121,6 +126,8 @@ class QuickAlertDialog(
         for ((operator, button) in buttons) {
             val checked = operator in selected
             button.isChecked = checked
+            val label = operator.maPeriod?.let { "${operator.label}\nMA$it" } ?: operator.label
+            button.text = if (checked) "✓ $label" else label
             button.isEnabled = ready
             val background = if (checked) com.google.android.material.R.attr.colorPrimaryContainer else com.google.android.material.R.attr.colorSurface
             val foreground = if (checked) com.google.android.material.R.attr.colorOnPrimaryContainer else com.google.android.material.R.attr.colorOnSurface

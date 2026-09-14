@@ -1,58 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/quoteRowContent"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:background="@drawable/bg_quote_row"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:padding="12dp">
-
-    <ImageView
-        android:id="@+id/ivDragHandle"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:layout_marginEnd="4dp"
-        android:contentDescription="@string/drag_handle"
-        android:src="@drawable/ic_drag_handle"
-        android:visibility="gone" />
-
-    <TextView
-        android:id="@+id/tvName"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:textAppearance="?attr/textAppearanceBody1" />
-
-    <TextView
-        android:id="@+id/tvRowPrice"
-        android:layout_width="70dp"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:gravity="end"
-        android:lines="1"
-        android:textAppearance="?attr/textAppearanceBody1"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/tvChangePercent"
-        android:layout_width="70dp"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:gravity="end"
-        android:lines="1"
-        android:textAppearance="?attr/textAppearanceBody2"
-        android:textStyle="bold" />
-
-    <TextView
-        android:id="@+id/tvChangeAmount"
-        android:layout_width="70dp"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:gravity="end"
-        android:lines="1"
-        android:textAppearance="?attr/textAppearanceBody2"
-        android:textStyle="bold" />
+    android:id="@+id/quoteRowContent" android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:background="@drawable/bg_quote_row" android:gravity="center_vertical" android:orientation="horizontal" android:padding="12dp">
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal" android:gravity="center_vertical">
+        <ImageView android:id="@+id/ivDragHandle" android:layout_width="24dp" android:layout_height="48dp" android:layout_marginEnd="4dp" android:contentDescription="@string/drag_handle" android:src="@drawable/ic_drag_handle" android:visibility="gone" />
+        <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+            <TextView android:id="@+id/tvName" android:layout_width="match_parent" android:layout_height="wrap_content" android:ellipsize="end" android:maxLines="1" android:textAppearance="?attr/textAppearanceBody1" />
+            <TextView android:id="@+id/tvStockCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="?attr/textAppearanceCaption" />
+            <TextView android:id="@+id/tvRuleCount" android:layout_width="match_parent" android:layout_height="wrap_content" android:textAppearance="?attr/textAppearanceCaption" android:textColor="?attr/colorPrimary" android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+    <TextView android:id="@+id/tvRowPrice" android:layout_width="80dp" android:layout_height="wrap_content" android:gravity="end" android:maxLines="1" android:textAppearance="?attr/textAppearanceBody1" android:textStyle="bold" />
+    <LinearLayout android:layout_width="88dp" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="end">
+        <TextView android:id="@+id/tvChangePercent" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="end" android:maxLines="1" android:textAppearance="?attr/textAppearanceBody1" android:textStyle="bold" />
+        <TextView android:id="@+id/tvChangeAmount" android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="end" android:maxLines="1" android:textAppearance="?attr/textAppearanceCaption" />
+    </LinearLayout>
 </LinearLayout>

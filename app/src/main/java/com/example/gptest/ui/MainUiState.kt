@@ -53,6 +53,7 @@ data class MainUiState(
     val rawExpanded: Boolean = false,
     val isRunning: Boolean = false,
     val watchlistLoaded: Boolean = false,
+    val ruleCounts: Map<String, Int> = emptyMap(),
     val intervalSeconds: Long = 5L,
     val rapidAlertThresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT,
     val lastUpdatedMs: Long? = null,

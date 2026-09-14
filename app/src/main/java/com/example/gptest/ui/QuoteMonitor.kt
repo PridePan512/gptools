@@ -59,6 +59,7 @@ class QuoteMonitor(
     private var rawExpanded = false
     private var isRunning = false
     private var watchlistLoaded = false
+    private var ruleCounts: Map<String, Int> = emptyMap()
     private var status: QuoteStatus = QuoteStatus.Idle
     private var intervalSeconds = sortModeStore.intervalSeconds.let { if (it < 1L) 5L else it }
     private var intervalMs = intervalSeconds * 1000L
@@ -277,6 +278,7 @@ class QuoteMonitor(
         if (operator !in AlertQuickAdd.availableOperators(code)) return
         scope.launch {
             val event = withContext(ioDispatcher) { addQuickAlertBlocking(code, operator) }
+            refreshRuleCounts()
             _events.tryEmit(event)
         }
     }
@@ -300,6 +302,18 @@ class QuoteMonitor(
 
     fun quickAlertOperators(code: String): Set<AlertOperator> {
         return AlertQuickAdd.operatorsFor(alertDataSource.loadRules(), code)
+    }
+
+    fun refreshRuleCounts() {
+        scope.launch {
+            val counts = withContext(ioDispatcher) {
+                alertDataSource.loadRules().filter { it.enabled }.flatMap { rule ->
+                    rule.conditions.map { it.stock.code }.distinct()
+                }.groupingBy { it }.eachCount()
+            }
+            ruleCounts = counts
+            publish()
+        }
     }
 
     fun startPolling(intervalText: String) {
@@ -510,6 +524,7 @@ class QuoteMonitor(
             rawExpanded = rawExpanded,
             isRunning = isRunning,
             watchlistLoaded = watchlistLoaded,
+            ruleCounts = ruleCounts,
             intervalSeconds = intervalSeconds,
             rapidAlertThresholds = rapidThresholds,
             lastUpdatedMs = lastUpdatedMs,

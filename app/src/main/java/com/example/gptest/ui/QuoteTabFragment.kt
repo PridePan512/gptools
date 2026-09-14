@@ -14,6 +14,8 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.gptest.business.QuoteSnapshot
+import com.example.gptest.R
+import com.example.gptest.ui.alert.AlertNotificationPermission
 import com.example.gptest.databinding.FragmentQuoteTabBinding
 import kotlinx.coroutines.launch
 import java.util.Collections
@@ -48,13 +50,32 @@ class QuoteTabFragment : Fragment() {
         )
         binding.rvQuoteList.layoutManager = LinearLayoutManager(requireContext())
         binding.rvQuoteList.adapter = quoteAdapter
+        binding.btnQuoteRetry.setOnClickListener {
+            AlertNotificationPermission.requestIfNeeded(requireActivity())
+            viewModel.startPolling(viewModel.uiState.value.intervalSeconds.toString())
+        }
         itemTouchHelper = ItemTouchHelper(dragCallback())
         itemTouchHelper.attachToRecyclerView(binding.rvQuoteList)
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect { state ->
                     val tab = state.tabs.find { it.id == tabId }
-                    quoteAdapter.submit(tab?.rows.orEmpty(), state.dragEnabled)
+                    val rows = tab?.rows.orEmpty()
+                    val hasData = rows.any { it.price.toDoubleOrNull() != null }
+                    val failed = state.status is QuoteStatus.NetworkError || state.status == QuoteStatus.InvalidResponse
+                    val message = when {
+                        !state.watchlistLoaded -> R.string.quotes_loading
+                        rows.isEmpty() -> R.string.quotes_empty
+                        failed && hasData -> R.string.quotes_stale
+                        failed -> R.string.quotes_failed
+                        !hasData && state.isRunning -> R.string.quotes_loading
+                        !hasData -> R.string.quotes_idle
+                        else -> null
+                    }
+                    binding.tvQuoteMessage.visibility = if (message == null) View.GONE else View.VISIBLE
+                    message?.let { binding.tvQuoteMessage.setText(it) }
+                    binding.btnQuoteRetry.visibility = if (failed && rows.isNotEmpty()) View.VISIBLE else View.GONE
+                    quoteAdapter.submit(tab?.rows.orEmpty(), state.dragEnabled, state.ruleCounts)
                 }
             }
         }

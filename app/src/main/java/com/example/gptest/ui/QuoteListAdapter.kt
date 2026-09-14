@@ -16,7 +16,8 @@ import com.example.gptest.business.QuoteSnapshot
 
 data class QuoteRow(
     val quote: QuoteSnapshot,
-    val dragEnabled: Boolean
+    val dragEnabled: Boolean,
+    val ruleCount: Int = 0
 ) {
     fun sameIdentity(other: QuoteRow): Boolean {
         return quote.requestCode == other.quote.requestCode
@@ -25,6 +26,7 @@ data class QuoteRow(
     fun sameVisible(other: QuoteRow): Boolean {
         return sameIdentity(other) &&
             dragEnabled == other.dragEnabled &&
+            ruleCount == other.ruleCount &&
             quote.name == other.quote.name &&
             quote.price == other.quote.price &&
             quote.changePercent == other.quote.changePercent &&
@@ -70,11 +72,12 @@ class QuoteListAdapter(
     var dragEnabled: Boolean = false
         private set
 
-    fun submit(rows: List<QuoteSnapshot>, dragEnabled: Boolean) {
+    fun submit(rows: List<QuoteSnapshot>, dragEnabled: Boolean, ruleCounts: Map<String, Int> = emptyMap()) {
         val newItems = rows.map { quote ->
             QuoteRow(
                 quote = quote,
-                dragEnabled = dragEnabled
+                dragEnabled = dragEnabled,
+                ruleCount = ruleCounts[quote.requestCode] ?: 0
             )
         }
         if (items.size == newItems.size && items.indices.all { items[it].sameVisible(newItems[it]) }) {
@@ -114,6 +117,8 @@ class QuoteListAdapter(
         private val dragHandle: ImageView = itemView.findViewById(R.id.ivDragHandle)
         private val tvName: TextView = itemView.findViewById(R.id.tvName)
         private val tvPrice: TextView = itemView.findViewById(R.id.tvRowPrice)
+        private val tvCode: TextView = itemView.findViewById(R.id.tvStockCode)
+        private val tvRuleCount: TextView = itemView.findViewById(R.id.tvRuleCount)
         private val tvChange: TextView = itemView.findViewById(R.id.tvChangePercent)
         private val tvChangeAmount: TextView = itemView.findViewById(R.id.tvChangeAmount)
         private val defaultNameColor = tvName.currentTextColor
@@ -140,7 +145,10 @@ class QuoteListAdapter(
 
         fun bind(row: QuoteRow) {
             val quote = row.quote
-            tvName.text = quote.name.ifEmpty { "--" }
+            tvName.text = quote.name.takeIf { it.isNotBlank() && it != "--" } ?: displayCode(quote)
+            tvCode.text = quote.requestCode.uppercase()
+            tvRuleCount.visibility = if (row.ruleCount > 0) View.VISIBLE else View.GONE
+            tvRuleCount.text = itemView.context.getString(R.string.stock_rule_count, row.ruleCount)
             tvPrice.text = quote.price.ifEmpty { "--" }
             tvChange.text = QuoteParser.formatChangePercent(quote.changePercent)
             tvChangeAmount.text = QuoteParser.formatChangeAmount(QuoteParser.changeAmount(quote))

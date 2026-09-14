@@ -7,7 +7,7 @@ data class DailyClose(val date: LocalDate, val close: Double)
 data class MovingAverages(val date: LocalDate, val values: Map<Int, Double?>)
 
 object MovingAverageCalculator {
-    val periods = listOf(5, 10, 20, 250)
+    val periods = listOf(5, 10, 20, 60, 120, 250)
 
     fun calculate(rows: List<DailyClose>): MovingAverages {
         require(rows.isNotEmpty()) { "No daily prices" }

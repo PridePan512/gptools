@@ -80,6 +80,11 @@ class MainActivity : AppCompatActivity(), QuoteTabHost {
         observeViewModel()
     }
 
+    override fun onResume() {
+        super.onResume()
+        QuoteMonitorHolder.get(this).refreshRuleCounts()
+    }
+
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.menu_main, menu)
         return true
@@ -162,18 +167,20 @@ class MainActivity : AppCompatActivity(), QuoteTabHost {
     }
 
     private fun bindFab(running: Boolean) {
-        binding.fabMonitor.setImageResource(if (running) R.drawable.ic_stop else R.drawable.ic_play)
+        binding.fabMonitor.setIconResource(if (running) R.drawable.ic_stop else R.drawable.ic_play)
+        binding.fabMonitor.setText(if (running) R.string.fab_stop else R.string.fab_start)
+        binding.fabMonitor.setTextColor(getColor(R.color.white))
         binding.fabMonitor.contentDescription = getString(
             if (running) R.string.fab_stop else R.string.fab_start
         )
         if (running) {
             binding.fabMonitor.backgroundTintList = ColorStateList.valueOf(getColor(R.color.quote_up))
-            binding.fabMonitor.imageTintList = ColorStateList.valueOf(getColor(R.color.white))
+            binding.fabMonitor.iconTint = ColorStateList.valueOf(getColor(R.color.white))
         } else {
             binding.fabMonitor.backgroundTintList = ColorStateList.valueOf(
                 getColor(R.color.purple_500)
             )
-            binding.fabMonitor.imageTintList = ColorStateList.valueOf(getColor(R.color.white))
+            binding.fabMonitor.iconTint = ColorStateList.valueOf(getColor(R.color.white))
         }
     }
 
@@ -523,7 +530,9 @@ class MainActivity : AppCompatActivity(), QuoteTabHost {
     }
 
     private fun statusLineText(status: QuoteStatus): String? = when (status) {
-        QuoteStatus.Idle, QuoteStatus.Running, QuoteStatus.Stopped,
+        QuoteStatus.Idle -> getString(R.string.status_idle)
+        QuoteStatus.Running -> getString(R.string.status_running)
+        QuoteStatus.Stopped -> getString(R.string.status_stopped)
         QuoteStatus.InvalidCode, QuoteStatus.DuplicateCode -> null
         QuoteStatus.EmptyWatchlist -> getString(R.string.status_empty_watchlist)
         QuoteStatus.InvalidResponse -> getString(R.string.status_invalid_response)
