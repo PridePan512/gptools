@@ -29,6 +29,8 @@
             android:exported="false"
             android:label="@string/alert_rules_title"
             android:parentActivityName=".ui.MainActivity" />
+        <activity android:name=".ui.box.BoxScanActivity" android:exported="false" />
+        <activity android:name=".ui.box.BoxBreakoutActivity" android:exported="false" />
         <activity
             android:name=".ui.alert.AlertRuleEditActivity"
             android:exported="false"
