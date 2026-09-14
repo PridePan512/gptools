@@ -20,7 +20,13 @@ class AlertQuickAddTest {
                 AlertOperator.VOLUME_SURGE,
                 AlertOperator.VOLUME_SHRINK,
                 AlertOperator.PRICE_SURGE,
-                AlertOperator.PRICE_DROP
+                AlertOperator.PRICE_DROP,
+                AlertOperator.BREAK_MA5,
+                AlertOperator.BREAK_MA10,
+                AlertOperator.BREAK_MA20,
+                AlertOperator.BREAK_MA60,
+                AlertOperator.BREAK_MA120,
+                AlertOperator.BREAK_MA250
             ),
             AlertQuickAdd.operators
         )
@@ -33,7 +39,13 @@ class AlertQuickAddTest {
                 AlertOperator.VOLUME_SURGE,
                 AlertOperator.VOLUME_SHRINK,
                 AlertOperator.PRICE_SURGE,
-                AlertOperator.PRICE_DROP
+                AlertOperator.PRICE_DROP,
+                AlertOperator.BREAK_MA5,
+                AlertOperator.BREAK_MA10,
+                AlertOperator.BREAK_MA20,
+                AlertOperator.BREAK_MA60,
+                AlertOperator.BREAK_MA120,
+                AlertOperator.BREAK_MA250
             ),
             AlertQuickAdd.availableOperators("sh000001")
         )

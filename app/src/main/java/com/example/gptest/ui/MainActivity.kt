@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity(), QuoteTabHost {
     private var settingsIntervalInput: TextInputEditText? = null
     private var watchlistMenuReady = false
     private var detailSheet: QuoteDetailSheet? = null
+    private var quickAlertDialog: QuickAlertDialog? = null
     private val stockCatalog by lazy { loadStockCatalog() }
 
     private val lastUpdatedFormatter = DateTimeFormatter.ofPattern("HH:mm:ss")
@@ -125,11 +126,11 @@ class MainActivity : AppCompatActivity(), QuoteTabHost {
                             UiEvent.AddDuplicateCode -> showMessage(getString(R.string.status_duplicate_code))
                             is UiEvent.OfferUndoDelete -> showUndoSnackbar(event.label)
                             is UiEvent.QuickAlertAdded -> {
-                                detailSheet?.markOperator(event.operator)
+                                quickAlertDialog?.refresh()
                                 showMessage(getString(R.string.quick_alert_added, event.label))
                             }
                             is UiEvent.QuickAlertRemoved -> {
-                                detailSheet?.unmarkOperator(event.operator)
+                                quickAlertDialog?.refresh()
                                 showMessage(getString(R.string.quick_alert_removed, event.label))
                             }
                             is UiEvent.TabAdded -> Unit
@@ -225,8 +226,15 @@ class MainActivity : AppCompatActivity(), QuoteTabHost {
         }
         MaterialAlertDialogBuilder(this)
             .setTitle(title)
-            .setItems(arrayOf(getString(R.string.delete))) { _, which ->
-                if (which == 0) viewModel.removeCode(quote.requestCode, tabId)
+            .setItems(arrayOf(getString(R.string.quick_alert_title), getString(R.string.delete))) { _, which ->
+                when (which) {
+                    0 -> {
+                        val alertDialog = QuickAlertDialog(this, quote.requestCode, title) { quickAlertDialog = null }
+                        quickAlertDialog = alertDialog
+                        alertDialog.show()
+                    }
+                    1 -> viewModel.removeCode(quote.requestCode, tabId)
+                }
             }
             .show()
     }

@@ -52,24 +52,5 @@
             android:text="@string/history_retry"
             android:visibility="gone" />
 
-        <TextView
-            android:id="@+id/tvQuickAlerts"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_marginTop="16dp"
-            android:layout_marginEnd="12dp"
-            android:text="@string/quick_alert_title"
-            android:textAppearance="?attr/textAppearanceSubtitle2" />
-
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/chipQuickAlerts"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_marginEnd="8dp"
-            android:layout_marginTop="4dp"
-            app:chipSpacingHorizontal="8dp"
-            app:chipSpacingVertical="4dp" />
     </LinearLayout>
 </androidx.core.widget.NestedScrollView>

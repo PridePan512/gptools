@@ -49,6 +49,7 @@ class QuoteMonitor(
     private val alertNotifier: AlertNotifier = NoOpAlertNotifier
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val movingAverageData = com.example.gptest.ui.alert.MovingAverageAlertData(scope, ioDispatcher)
     private val tabs = mutableListOf<TabState>()
     private var selectedTabId: String = WatchlistTabs.DEFAULT_ID
     private var quotes: List<QuoteSnapshot> = emptyList()
@@ -423,6 +424,9 @@ class QuoteMonitor(
         val fires = withContext(ioDispatcher) {
             val rules = alertDataSource.loadRules()
             if (rules.isEmpty()) return@withContext emptyList()
+            val maCodes = rules.filter { it.enabled }.flatMap { it.conditions }
+                .filter { it.operator.maPeriod != null }.map { it.stock.code }.toSet()
+            val references = movingAverageData.references(maCodes, clock.millis())
             val result = AlertEvaluator.evaluate(
                 rules,
                 current,
@@ -430,7 +434,8 @@ class QuoteMonitor(
                 clock.millis(),
                 history,
                 intervalSeconds,
-                rapidThresholds
+                rapidThresholds,
+                movingAverages = references
             )
             alertDataSource.replaceRules(result.updatedRules)
             result.fires

@@ -11,7 +11,7 @@ enum class AlertMetric(val label: String, val suffix: String) {
     AMPLITUDE("振幅", "%")
 }
 
-enum class AlertOperator(val label: String, val needsValue: Boolean = true) {
+enum class AlertOperator(val label: String, val needsValue: Boolean = true, val maPeriod: Int? = null) {
     GTE("高于"),
     LTE("低于"),
     CROSS_UP("涨到"),
@@ -23,7 +23,13 @@ enum class AlertOperator(val label: String, val needsValue: Boolean = true) {
     VOLUME_SURGE("快速放量", needsValue = false),
     VOLUME_SHRINK("快速缩量", needsValue = false),
     PRICE_SURGE("快速拉升", needsValue = false),
-    PRICE_DROP("快速下跌", needsValue = false)
+    PRICE_DROP("快速下跌", needsValue = false),
+    BREAK_MA5("破五日线", false, 5),
+    BREAK_MA10("破十日线", false, 10),
+    BREAK_MA20("破月线", false, 20),
+    BREAK_MA60("破季线", false, 60),
+    BREAK_MA120("破半年线", false, 120),
+    BREAK_MA250("破年线", false, 250)
 }
 
 enum class AlertMatchMode(val label: String, val joiner: String) {

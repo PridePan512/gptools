@@ -10,9 +10,14 @@ import java.net.URL
 import java.time.LocalDate
 
 data class HistoryAverages(val averages: MovingAverages, val forwardAdjusted: Boolean)
+data class DailyHistory(val closes: List<DailyClose>, val forwardAdjusted: Boolean)
 
 class HistoryRepository {
-    fun fetchAverages(code: String): Result<HistoryAverages> = runCatching {
+    fun fetchAverages(code: String): Result<HistoryAverages> = fetchDaily(code).mapCatching {
+        HistoryAverages(MovingAverageCalculator.calculate(it.closes), it.forwardAdjusted)
+    }
+
+    fun fetchDaily(code: String): Result<DailyHistory> = runCatching {
         val normalized = requireNotNull(QuoteParser.normalizeStockCode(code))
         val url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=$normalized,day,,,320,qfq"
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -31,7 +36,8 @@ class HistoryRepository {
                 val row = rows.getJSONArray(index)
                 DailyClose(LocalDate.parse(row.getString(0)), row.getString(2).toDouble())
             }
-            HistoryAverages(MovingAverageCalculator.calculate(closes), adjusted != null)
+            MovingAverageCalculator.calculate(closes) // Validate dates and prices before using history.
+            DailyHistory(closes.sortedBy { it.date }, adjusted != null)
         } finally {
             connection.disconnect()
         }

@@ -43,7 +43,8 @@ object AlertEvaluator {
         older: List<QuoteSnapshot> = emptyList(),
         intervalSeconds: Long = 5L,
         thresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT,
-        history: List<QuoteSnapshot> = older
+        history: List<QuoteSnapshot> = older,
+        movingAverages: Map<String, MovingAverageReference> = emptyMap()
     ): AlertTickResult {
         val currentByCode = current.associateBy { it.requestCode }
         val previousByCode = previous.associateBy { it.requestCode }
@@ -58,10 +59,10 @@ object AlertEvaluator {
             }
             val matched = when (rule.matchMode) {
                 AlertMatchMode.ALL -> rule.conditions.all {
-                    isSatisfied(it, currentByCode, previousByCode, historyByCode, intervalSeconds, thresholds)
+                    isSatisfied(it, currentByCode, previousByCode, historyByCode, intervalSeconds, thresholds, movingAverages)
                 }
                 AlertMatchMode.ANY -> rule.conditions.any {
-                    isSatisfied(it, currentByCode, previousByCode, historyByCode, intervalSeconds, thresholds)
+                    isSatisfied(it, currentByCode, previousByCode, historyByCode, intervalSeconds, thresholds, movingAverages)
                 }
             }
             val status = if (matched) AlertRuleStatus.FIRED else AlertRuleStatus.WAITING
@@ -101,9 +102,22 @@ object AlertEvaluator {
         previousByCode: Map<String, QuoteSnapshot>,
         historyByCode: Map<String, List<QuoteSnapshot>> = emptyMap(),
         intervalSeconds: Long = 5L,
-        thresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT
+        thresholds: RapidAlertThresholds = RapidAlertThresholds.DEFAULT,
+        movingAverages: Map<String, MovingAverageReference> = emptyMap()
     ): Boolean {
         val quote = currentByCode[condition.stock.code]
+        condition.operator.maPeriod?.let { period ->
+            val reference = movingAverages[condition.stock.code] ?: return false
+            val level = reference.levels[period] ?: return false
+            val before = previousByCode[condition.stock.code] ?: return false
+            if (quote == null || quote.fetchedAtMs <= before.fetchedAtMs) return false
+            if (listOf(quote, before).any {
+                Instant.ofEpochMilli(it.fetchedAtMs).atZone(TradingSession.SHANGHAI).toLocalDate() != reference.date
+            }) return false
+            val price = numeric(quote.price)?.takeIf { it.isFinite() && it > 0 } ?: return false
+            val previousPrice = numeric(before.price)?.takeIf { it.isFinite() && it > 0 } ?: return false
+            return previousPrice >= level && price < level
+        }
         if (!condition.operator.needsValue) {
             return when (condition.operator) {
                 AlertOperator.VOLUME_SURGE,
@@ -139,7 +153,13 @@ object AlertEvaluator {
             AlertOperator.VOLUME_SURGE,
             AlertOperator.VOLUME_SHRINK,
             AlertOperator.PRICE_SURGE,
-            AlertOperator.PRICE_DROP -> false
+            AlertOperator.PRICE_DROP,
+            AlertOperator.BREAK_MA5,
+            AlertOperator.BREAK_MA10,
+            AlertOperator.BREAK_MA20,
+            AlertOperator.BREAK_MA60,
+            AlertOperator.BREAK_MA120,
+            AlertOperator.BREAK_MA250 -> false
         }
     }
 

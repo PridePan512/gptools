@@ -110,6 +110,13 @@
     <string name="alert_enable">启用规则</string>
     <string name="alert_need_watchlist">请先在自选列表添加股票</string>
     <string name="quick_alert_title">一键监控</string>
+    <string name="quick_group_ma">均线跌破</string>
+    <string name="quick_group_board">涨跌停</string>
+    <string name="quick_group_rapid">量价异动</string>
+    <string name="quick_alert_loading">正在读取监控设置…</string>
+    <string name="quick_alert_selected">已选择 %1$d 项 · 点击即可开启或取消</string>
+    <string name="quick_alert_help">需启动行情监控。均线按盘中价格计算，从线上跌至线下时提醒；历史数据就绪后生效。重复提醒间隔 10 分钟。</string>
+    <string name="quick_alert_dialog_title">一键监控 · %1$s（%2$s）</string>
     <string name="quick_alert_added">已添加 %1$s</string>
     <string name="quick_alert_removed">已取消 %1$s</string>
     <string name="alert_condition_tap_edit">点按修改这条条件</string>
