@@ -123,4 +123,16 @@
     <string name="tab_deleted">已删除分组 %1$s</string>
     <string name="tab_delete_confirm">删除「%1$s」？该分组里的股票会一并移除，其他分组不受影响。</string>
     <string name="tab_confirm">确定</string>
+    <string name="history_title">日线均线</string>
+    <string name="history_loading">正在加载历史行情…</string>
+    <string name="history_failed">历史行情加载失败</string>
+    <string name="history_retry">重试</string>
+    <string name="history_insufficient">数据不足</string>
+    <string name="history_qfq">前复权</string>
+    <string name="history_unadjusted">不复权</string>
+    <string name="history_info">数据截至 %1$s · %2$s\n按打开详情时的日线计算；如含当日未收盘数据，均线仅为盘中参考。</string>
+    <string name="ma5_label">五日 MA5</string>
+    <string name="ma10_label">十日 MA10</string>
+    <string name="ma20_label">月均线 MA20</string>
+    <string name="ma250_label">年均线 MA250</string>
 </resources>
