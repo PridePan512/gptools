@@ -26,7 +26,6 @@ class BoxDetectorTest {
         assertEquals(10.0, result.lower, 0.001)
         assertEquals(1.6, result.volumeRatio!!, 0.001)
         assertTrue(result.stillAbove)
-        assertTrue(result.upperTouches >= 2 && result.lowerTouches >= 2)
     }
 
     @Test fun aWickOrExactlyOnePercentDoesNotConfirmBreakout() {
@@ -76,5 +75,46 @@ class BoxDetectorTest {
         assertEquals(LocalDate.parse("2026-09-11"), BoxMarketCalendar.completedDates(bars, morning).last())
         assertEquals(LocalDate.parse("2026-09-07"), BoxMarketCalendar.completedDates(bars, morning).first())
         assertEquals(LocalDate.parse("2026-09-14"), BoxMarketCalendar.completedDates(bars, morning.withHour(16)).last())
+    }
+
+    @Test fun configurableWidthAndBreakoutActuallyChangeSelection() {
+        val dates = (60..64).map { start.plusDays(it.toLong()) }
+        val rows = box() + tail()
+        assertNull(BoxDetector.detect(rows, dates, BoxScanConfig(maxWidthPercent = 9.0)))
+        assertNotNull(BoxDetector.detect(rows, dates, BoxScanConfig(maxWidthPercent = 11.0)))
+        assertNull(BoxDetector.detect(rows, dates, BoxScanConfig(breakoutPercent = 4.0)))
+        assertNotNull(BoxDetector.detect(rows, dates, BoxScanConfig(breakoutPercent = 2.0)))
+    }
+
+    @Test fun configurableWindowAffectsDetection() {
+        val dates = (60..64).map { start.plusDays(it.toLong()) }
+        val rows = box() + tail()
+        val config = BoxScanConfig(windows = listOf(30))
+        assertEquals(30, BoxDetector.detect(rows, dates, config)!!.days)
+        assertEquals(260, BoxScanConfig(windows = listOf(250)).historyCount)
+        assertEquals(255, BoxScanConfig(volumeDays = 250).minimumBars)
+    }
+
+    @Test fun singleHighAndLowAreEnoughWhenWidthAndTrendQualify() {
+        val rows = (0 until 60).map { index ->
+            DailyBar(start.plusDays(index.toLong()), 10.5, 10.5,
+                if (index == 15) 11.0 else 10.6, if (index == 45) 10.0 else 10.4, 1000.0)
+        } + tail()
+        val hit = BoxDetector.detect(rows, (60..64).map { start.plusDays(it.toLong()) },
+            BoxScanConfig(windows = listOf(60)))!!
+        assertEquals(11.0, hit.upper, 0.001)
+        assertEquals(10.0, hit.lower, 0.001)
+        assertEquals(start.plusDays(60), hit.breakout)
+    }
+
+    @Test fun configurableVolumeBaselineAndInvalidInputs() {
+        val dates = (60..64).map { start.plusDays(it.toLong()) }
+        val rows = box().mapIndexed { i, bar -> bar.copy(volume = if (i >= 55) 2000.0 else 1000.0) } + tail()
+        val hit = BoxDetector.detect(rows, dates, BoxScanConfig(volumeDays = 5))!!
+        assertEquals(0.8, hit.volumeRatio!!, 0.001)
+        assertThrows(IllegalArgumentException::class.java) { BoxScanConfig(maxWidthPercent = Double.NaN) }
+        assertThrows(IllegalArgumentException::class.java) { BoxScanConfig(windows = emptyList()) }
+        assertThrows(IllegalArgumentException::class.java) { BoxScanConfig(windows = listOf(300)) }
+        assertThrows(IllegalArgumentException::class.java) { BoxScanConfig(volumeRatio = 0.0) }
     }
 }

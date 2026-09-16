@@ -57,19 +57,20 @@ class BoxBreakoutActivity : AppCompatActivity() {
             text("箱体区间", 18f)
             text("${box.start} — ${box.end} · ${box.days} 个交易日\n" +
                 "上沿 ${number(box.upper)} 元　下沿 ${number(box.lower)} 元\n" +
-                "箱体宽度 ${number(box.widthPercent)}%\n上沿测试 ${box.upperTouches} 次 · 下沿测试 ${box.lowerTouches} 次")
+                "箱体宽度 ${number(box.widthPercent)}%")
             text("突破依据", 18f)
             text("突破收盘价 ${number(box.breakoutClose)} 元\n" +
-                "超过上沿 ${number(box.breakoutPercent)}%（阈值 > 1%）\n" +
-                "成交量 / 前 20 日均量：${box.volumeRatio?.let { number(it) + " 倍" } ?: "数据不足"}\n" +
-                "${if ((box.volumeRatio ?: 0.0) >= 1.5) "满足放量条件（≥ 1.5 倍）" else "未满足放量条件或无可用基准"}")
+                "超过上沿 ${number(box.breakoutPercent)}%（阈值 > ${number(state.config.breakoutPercent)}%）\n" +
+                "成交量 / 前 ${state.config.volumeDays} 日均量：${box.volumeRatio?.let { number(it) + " 倍" } ?: "数据不足"}\n" +
+                "${if ((box.volumeRatio ?: 0.0) >= state.config.volumeRatio) "满足放量条件（≥ ${number(state.config.volumeRatio)} 倍）" else "未满足放量条件或无可用基准"}")
             text("截止日状态", 18f)
             text("${box.latestDate} 收盘 ${number(box.latestClose)} 元\n" +
                 "距原上沿 ${number((box.latestClose / box.upper - 1) * 100)}%\n" +
                 "数据口径：${if (hit.adjusted) "前复权" else "原始日线（接口未返回复权字段）"} · 腾讯日线\n" +
                 "本页展示本次扫描快照，不随实时行情变化。")
             text("检测规则", 18f)
-            text(BOX_RULES, 13f)
+            text(if (state.ruleVersion == com.example.gptest.business.BoxDetector.VERSION) boxRules(state.config)
+                else "这是旧版规则的结果快照，请重新扫描以应用当前规则。", 13f)
         }
     }
 }

@@ -3,6 +3,7 @@ package com.example.gptest.data
 import android.content.Context
 import android.util.AtomicFile
 import com.example.gptest.business.BoxBreakout
+import com.example.gptest.business.BoxScanConfig
 import com.example.gptest.business.DailyBar
 import com.example.gptest.business.StockCatalogEntry
 import org.json.JSONArray
@@ -21,7 +22,9 @@ data class BoxScanState(
     val outcomes: Map<String, String> = emptyMap(),
     val hits: List<BoxHit> = emptyList(),
     val message: String = "尚未扫描",
-    val startedAt: Long = 0L
+    val startedAt: Long = 0L,
+    val config: BoxScanConfig = BoxScanConfig(),
+    val ruleVersion: Int = com.example.gptest.business.BoxDetector.VERSION
 ) {
     val processed get() = outcomes.size
     val failures get() = outcomes.count { it.value == "failed" }
@@ -40,6 +43,8 @@ class BoxScanStore(context: Context) {
             check(json.getInt("version") == 1)
             val outcomes = json.getJSONObject("outcomes")
             BoxScanState(loaded = true,
+                ruleVersion = json.optInt("ruleVersion", 1),
+                config = json.optJSONObject("config")?.let(::decodeBoxConfig) ?: BoxScanConfig(),
                 universe = json.getJSONArray("universe").objects().map { StockCatalogEntry(it.getString("code"), it.getString("name")) },
                 dates = json.getJSONArray("dates").let { array -> (0 until array.length()).map { LocalDate.parse(array.getString(it)) } },
                 outcomes = outcomes.keys().asSequence().associateWith { outcomes.getString(it) },
@@ -52,6 +57,8 @@ class BoxScanStore(context: Context) {
 
     fun save(state: BoxScanState) {
         val json = JSONObject().put("version", 1).put("started", state.startedAt)
+            .put("ruleVersion", state.ruleVersion)
+            .put("config", state.config.toJson())
             .put("universe", JSONArray(state.universe.map { JSONObject().put("code", it.code).put("name", it.name) }))
             .put("dates", JSONArray(state.dates.map { it.toString() }))
             .put("outcomes", JSONObject(state.outcomes))
@@ -71,7 +78,7 @@ class BoxScanStore(context: Context) {
         return JSONObject().put("code", hit.stock.code).put("name", hit.stock.name)
             .put("adjusted", hit.adjusted).put("start", box.start.toString()).put("end", box.end.toString())
             .put("breakout", box.breakout.toString()).put("days", box.days).put("lower", box.lower)
-            .put("upper", box.upper).put("upperTouches", box.upperTouches).put("lowerTouches", box.lowerTouches)
+            .put("upper", box.upper)
             .put("close", box.breakoutClose).put("ratio", box.volumeRatio ?: JSONObject.NULL)
             .put("latest", box.latestClose).put("latestDate", box.latestDate.toString())
             .put("bars", JSONArray(hit.bars.map { bar -> JSONArray(listOf(bar.date.toString(), bar.open,
@@ -83,8 +90,7 @@ class BoxScanStore(context: Context) {
         val bars = json.getJSONArray("bars")
         return BoxHit(StockCatalogEntry(json.getString("code"), json.getString("name")),
             BoxBreakout(date("start"), date("end"), date("breakout"), json.getInt("days"),
-                json.getDouble("lower"), json.getDouble("upper"), json.getInt("upperTouches"),
-                json.getInt("lowerTouches"), json.getDouble("close"),
+                json.getDouble("lower"), json.getDouble("upper"), json.getDouble("close"),
                 if (json.isNull("ratio")) null else json.getDouble("ratio"),
                 json.getDouble("latest"), date("latestDate")),
             (0 until bars.length()).map { index -> bars.getJSONArray(index).let {

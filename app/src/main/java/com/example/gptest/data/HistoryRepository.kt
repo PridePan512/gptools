@@ -28,6 +28,7 @@ class HistoryRepository {
     fun fetchBars(code: String, count: Int = 320): Result<BarHistory> = runCatching {
         require(count in 1..320)
         val normalized = requireNotNull(QuoteParser.normalizeStockCode(code))
+        HistoryAccess.gate.blocked()?.let { throw it }
         val url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=$normalized,day,,,$count,qfq"
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 8_000
@@ -35,8 +36,12 @@ class HistoryRepository {
             setRequestProperty("User-Agent", "Mozilla/5.0")
         }
         try {
-            check(connection.responseCode == HttpURLConnection.HTTP_OK) { "History request failed" }
-            val root = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+            val status = connection.responseCode
+            val stream = if (status == HttpURLConnection.HTTP_OK) connection.inputStream else connection.errorStream
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            HistoryAccess.gate.checkResponse(status, body, connection.getHeaderField("Retry-After"))
+            check(status == HttpURLConnection.HTTP_OK) { "历史行情请求失败（HTTP $status）" }
+            val root = JSONObject(body)
             check(root.getInt("code") == 0) { "History service error" }
             val stock = root.getJSONObject("data").getJSONObject(normalized)
             val adjusted = stock.optJSONArray("qfqday")

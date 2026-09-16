@@ -4,6 +4,7 @@ import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.gptest.business.BoxBreakout
+import com.example.gptest.business.BoxScanConfig
 import com.example.gptest.business.DailyBar
 import com.example.gptest.business.StockCatalogEntry
 import com.example.gptest.data.BoxHit
@@ -26,11 +27,11 @@ class BoxScanStoreTest {
             val date = LocalDate.of(2026, 9, 11)
             val stock = StockCatalogEntry("sh600000", "测试股票")
             val box = BoxBreakout(date.minusDays(30), date.minusDays(1), date, 20,
-                10.0, 11.0, 3, 2, 11.3, null, 11.4, date)
+                10.0, 11.0, 11.3, null, 11.4, date)
             val hit = BoxHit(stock, box, listOf(DailyBar(date, 11.0, 11.3, 11.5, 10.9, 1500.0)), true)
             val state = BoxScanState(loaded = true, running = true, universe = listOf(stock),
                 dates = (4 downTo 0).map { date.minusDays(it.toLong()) }, outcomes = mapOf(stock.code to "hit"),
-                hits = listOf(hit), startedAt = 1234L)
+                hits = listOf(hit), startedAt = 1234L, config = BoxScanConfig(maxWidthPercent = 35.0, volumeRatio = 2.0))
             store.save(state)
             val restored = BoxScanStore(context).read()
             assertFalse(restored.running)
@@ -38,8 +39,21 @@ class BoxScanStoreTest {
             assertEquals(state.dates, restored.dates)
             assertEquals(state.outcomes, restored.outcomes)
             assertEquals(state.hits, restored.hits)
+            assertEquals(state.config, restored.config)
+            assertEquals(state.ruleVersion, restored.ruleVersion)
             assertEquals(1234L, restored.startedAt)
             assertTrue(restored.complete)
+            val file = File(directory, "box-scan-v1.json")
+            val legacy = org.json.JSONObject(file.readText()).apply {
+                remove("config")
+                remove("ruleVersion")
+                getJSONArray("hits").getJSONObject(0).put("upperTouches", 3).put("lowerTouches", 2)
+            }
+            file.writeText(legacy.toString())
+            val old = BoxScanStore(context).read()
+            assertEquals(BoxScanConfig(), old.config)
+            assertEquals(1, old.ruleVersion)
+            assertEquals(state.hits, old.hits)
         } finally {
             directory.listFiles()?.forEach { it.delete() }
             directory.delete()

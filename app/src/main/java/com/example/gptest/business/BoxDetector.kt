@@ -4,7 +4,6 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZonedDateTime
 import kotlin.math.abs
-import kotlin.math.min
 
 data class DailyBar(val date: LocalDate, val open: Double, val close: Double,
                     val high: Double, val low: Double, val volume: Double)
@@ -12,7 +11,7 @@ data class DailyBar(val date: LocalDate, val open: Double, val close: Double,
 data class BoxBreakout(
     val start: LocalDate, val end: LocalDate, val breakout: LocalDate,
     val days: Int, val lower: Double, val upper: Double,
-    val upperTouches: Int, val lowerTouches: Int, val breakoutClose: Double,
+    val breakoutClose: Double,
     val volumeRatio: Double?, val latestClose: Double, val latestDate: LocalDate
 ) {
     val widthPercent get() = (upper / lower - 1) * 100
@@ -21,10 +20,9 @@ data class BoxBreakout(
 }
 
 object BoxDetector {
-    const val VERSION = 1
-    val windows = listOf(60, 40, 30, 20)
+    const val VERSION = 2
 
-    fun detect(bars: List<DailyBar>, marketDates: List<LocalDate>): BoxBreakout? {
+    fun detect(bars: List<DailyBar>, marketDates: List<LocalDate>, config: BoxScanConfig = BoxScanConfig()): BoxBreakout? {
         require(marketDates.size == 5 && marketDates.distinct().size == 5)
         val dates = marketDates.sorted()
         val rows = bars.filter { it.date <= dates.last() }.sortedBy { it.date }
@@ -34,51 +32,36 @@ object BoxDetector {
                 bar.low > 0 && bar.volume >= 0 && bar.high >= bar.low &&
                 bar.open in bar.low..bar.high && bar.close in bar.low..bar.high
         })
-        if (rows.size < 25 || rows.last().date != dates.last()) return null
+        if (rows.size < config.minimumBars || rows.last().date != dates.last()) return null
         for (index in rows.indices.reversed()) {
             val candle = rows[index]
             if (candle.date !in dates) continue
-            for (length in windows) {
-                if (index < length) continue
+            for (length in config.windows.sortedDescending()) {
+                if (index < maxOf(length, config.volumeDays)) continue
                 val box = rows.subList(index - length, index)
                 val upper = box.maxOf { it.high }
                 val lower = box.minOf { it.low }
                 val width = upper - lower
-                if (width <= 0 || width / lower > 0.15) continue
-                if (candle.close <= upper * 1.01) continue
-                val tolerance = min(width * 0.2, upper * 0.01)
-                val highs = touches(box.map { it.high >= upper - tolerance })
-                val lows = touches(box.map { it.low <= lower + tolerance })
-                if (highs < 2 || lows < 2) continue
+                if (width <= 0 || width / lower > config.maxWidthPercent / 100) continue
+                if (candle.close <= upper * (1 + config.breakoutPercent / 100)) continue
                 // Reject a steadily rising/falling channel masquerading as a rectangle.
                 val meanX = (length - 1) / 2.0
                 val meanY = box.map { it.close }.average()
                 val slope = box.indices.sumOf { (it - meanX) * (box[it].close - meanY) } /
                     box.indices.sumOf { (it - meanX) * (it - meanX) }
-                if (abs(slope * (length - 1)) > width * 0.35) continue
+                if (abs(slope * (length - 1)) > width * config.slopeWidthPercent / 100) continue
                 val third = length / 3
                 if (abs(box.take(third).map { it.close }.average() -
-                            box.takeLast(third).map { it.close }.average()) > width * 0.35) continue
-                val averageVolume = rows.subList(index - 20, index).map { it.volume }.average()
+                            box.takeLast(third).map { it.close }.average()) > width * config.meanWidthPercent / 100) continue
+                val averageVolume = rows.subList(index - config.volumeDays, index).map { it.volume }.average()
                 return BoxBreakout(box.first().date, box.last().date, candle.date, length, lower, upper,
-                    highs, lows, candle.close, if (averageVolume > 0) candle.volume / averageVolume else null,
+                    candle.close, if (averageVolume > 0) candle.volume / averageVolume else null,
                     rows.last().close, rows.last().date)
             }
         }
         return null
     }
 
-    private fun touches(touches: List<Boolean>): Int {
-        var count = 0
-        var gap = 3
-        for (touch in touches) {
-            if (touch) {
-                if (gap >= 3) count++
-                gap = 0
-            } else gap++
-        }
-        return count
-    }
 }
 
 object AStockUniverse {

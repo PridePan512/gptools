@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.gptest.data.BoxHit
 import com.example.gptest.data.BoxScanState
+import com.example.gptest.data.HistoryAccess
 import com.example.gptest.ui.prepareEdgeToEdge
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
@@ -25,15 +26,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import kotlinx.coroutines.launch
 import java.util.Locale
-
-internal const val BOX_RULES = "扫描范围：项目内置沪深京 A 股名单，非实时全市场名单。剔除基金、指数及 B 股。\n\n" +
-    "最近五日：依据上证指数日线确定的五个已完成交易日。15:10 前不使用当天日线；扫描期间固定截止日期。\n\n" +
-    "箱体：突破前 20 / 30 / 40 / 60 根日线，上下沿取区间最高 / 最低价，宽度不超过下沿的 15%。上下沿各至少两次测试，接近边界的误差不超过箱高的 20% 或上沿的 1%（取较小值）；两次测试间至少隔 3 根未触及边界的日线。\n\n" +
-    "横盘：拟合趋势的总变化、前后各三分之一平均收盘价差均不超过箱高的 35%。突破日不参与箱体计算。\n\n" +
-    "突破：收盘价严格超过箱体上沿 1%。优先最近的突破日，同日多个窗口优先最长窗口，每只股票只展示一次。\n\n" +
-    "放量：突破日成交量 ÷ 此前 20 日平均成交量，达到 1.5 倍标记放量。仍在上方：截止日收盘价高于原箱体上沿。\n\n" +
-    "历史不足 25 根或截止日无日线会单独统计。价格采用接口前复权数据；无复权字段时采用原始日线并在详情标注。\n\n" +
-    "离开检测页面自动暂停，每 10 只及暂停时保存进度。继续扫描沿用原截止日期；获取最新结果请重新扫描。形态规则版本：1。"
 
 internal fun AppCompatActivity.boxScreen(title: String): LinearLayout {
     val root = LinearLayout(this).apply {
@@ -60,6 +52,21 @@ internal fun number(value: Double) = String.format(Locale.CHINA, "%.2f", value)
 
 class BoxScanActivity : AppCompatActivity() {
     private val controller by lazy { BoxScanController.get(this) }
+    private var pendingStart: Pair<Boolean, Boolean>? = null
+    private val notificationPermission = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) {
+        pendingStart?.let { (fresh, retry) -> controller.start(fresh, retry) }
+        pendingStart = null
+    }
+
+    private fun startScan(fresh: Boolean = false, retryFailures: Boolean = false) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            pendingStart = fresh to retryFailures
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else controller.start(fresh, retryFailures)
+    }
     private lateinit var status: TextView
     private lateinit var progress: LinearProgressIndicator
     private lateinit var start: MaterialButton
@@ -76,7 +83,16 @@ class BoxScanActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         prepareEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (savedInstanceState?.getBoolean("pendingScan") == true) {
+            pendingStart = savedInstanceState.getBoolean("pendingFresh") to savedInstanceState.getBoolean("pendingRetry")
+        }
         val root = boxScreen("箱体检测")
+        (root.getChildAt(0) as MaterialToolbar).menu.add("设置").apply {
+            setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS)
+            setOnMenuItemClickListener {
+                startActivity(Intent(this@BoxScanActivity, BoxSettingsActivity::class.java)); true
+            }
+        }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), 0, dp(16), 0)
@@ -85,7 +101,9 @@ class BoxScanActivity : AppCompatActivity() {
         val rule = MaterialButton(this, null, androidx.appcompat.R.attr.borderlessButtonStyle).apply {
             text = "内置 A 股名单 · 规则说明"
             setOnClickListener { MaterialAlertDialogBuilder(this@BoxScanActivity).setTitle("检测规则")
-                .setMessage(BOX_RULES).setPositiveButton("知道了", null).show() }
+                .setMessage("当前检测规则：\n\n" + boxRules(if (controller.state.value.universe.isEmpty())
+                    com.example.gptest.data.BoxScanPreferences(this@BoxScanActivity).read() else controller.state.value.config))
+                .setPositiveButton("知道了", null).show() }
         }
         content.addView(rule)
         status = TextView(this).apply { textSize = 13f; setPadding(0, dp(8), 0, dp(8)) }
@@ -94,18 +112,18 @@ class BoxScanActivity : AppCompatActivity() {
         content.addView(progress, LinearLayout.LayoutParams(-1, dp(4)))
         val actions = LinearLayout(this)
         start = MaterialButton(this).apply { setOnClickListener {
-            if (controller.state.value.running) controller.pause() else controller.start()
+            if (controller.state.value.running) controller.pause() else startScan()
         } }
         restart = MaterialButton(this).apply { text = "重新扫描"; setOnClickListener {
             MaterialAlertDialogBuilder(this@BoxScanActivity).setTitle("重新扫描？")
                 .setMessage("将替换上次进度和结果，按最新已完成交易日重新检测内置 A 股名单。")
-                .setNegativeButton("取消", null).setPositiveButton("重新扫描") { _, _ -> controller.start(fresh = true) }.show()
+                .setNegativeButton("取消", null).setPositiveButton("重新扫描") { _, _ -> startScan(fresh = true) }.show()
         } }
         actions.addView(start, LinearLayout.LayoutParams(0, -2, 1f).apply { marginEnd = dp(8) })
         actions.addView(restart, LinearLayout.LayoutParams(0, -2, 1f))
         content.addView(actions)
         retry = MaterialButton(this, null, androidx.appcompat.R.attr.borderlessButtonStyle).apply {
-            text = "重试失败并继续"; setOnClickListener { controller.start(retryFailures = true) }
+            text = "重试失败并继续"; setOnClickListener { startScan(retryFailures = true) }
         }
         content.addView(retry)
         val filters = com.google.android.material.chip.ChipGroup(this)
@@ -131,11 +149,24 @@ class BoxScanActivity : AppCompatActivity() {
         }
         content.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
         lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) { controller.state.collect(::render) }
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { controller.state.collect(::render) }
+                launch {
+                    while (true) {
+                        kotlinx.coroutines.delay(1_000)
+                        render(controller.state.value)
+                    }
+                }
+            }
         }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        pendingStart?.let { (fresh, retry) ->
+            outState.putBoolean("pendingScan", true)
+            outState.putBoolean("pendingFresh", fresh)
+            outState.putBoolean("pendingRetry", retry)
+        }
         outState.putBoolean("above", above.isChecked)
         outState.putBoolean("volume", volume.isChecked)
         outState.putBoolean("st", hideSt.isChecked)
@@ -144,7 +175,6 @@ class BoxScanActivity : AppCompatActivity() {
 
     override fun onStop() {
         window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        if (!isChangingConfigurations) controller.pause()
         super.onStop()
     }
 
@@ -155,13 +185,18 @@ class BoxScanActivity : AppCompatActivity() {
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
         if (!::empty.isInitialized) return
+        val blocked = HistoryAccess.gate.blocked()
+        val oldRules = state.universe.isNotEmpty() && state.ruleVersion != com.example.gptest.business.BoxDetector.VERSION
+        volume.text = "放量≥${number(state.config.volumeRatio)}倍"
         val shown = state.hits.filter {
             (!above.isChecked || it.box.stillAbove) &&
-                (!volume.isChecked || (it.box.volumeRatio ?: 0.0) >= 1.5) &&
+                (!volume.isChecked || (it.box.volumeRatio ?: 0.0) >= state.config.volumeRatio) &&
                 (!hideSt.isChecked || !it.stock.name.contains("ST", true))
         }.sortedWith(compareByDescending<BoxHit> { it.box.breakout }.thenByDescending { it.box.breakoutPercent })
         status.text = if (!state.loaded) "正在读取上次记录…" else buildString {
-            append(state.message)
+            append(blocked?.message ?: state.message)
+            if (oldRules) append("\n检测规则已更新，请重新扫描；以下保留旧版结果")
+            if (state.universe.isNotEmpty()) append("\n本次规则：宽度≤${number(state.config.maxWidthPercent)}% · 突破>${number(state.config.breakoutPercent)}%")
             if (state.dates.isNotEmpty()) append("\n${state.dates.first()} 至 ${state.dates.last()} · 收盘确认")
             append("\n已处理 ${state.processed}/${state.universe.size} · 命中 ${state.hits.size} · 显示 ${shown.size}")
             append("\n未命中 ${state.outcomes.count { it.value == "none" }}")
@@ -170,17 +205,17 @@ class BoxScanActivity : AppCompatActivity() {
         progress.max = state.universe.size.coerceAtLeast(1)
         progress.progress = state.processed
         start.text = when { state.running -> "暂停扫描"; state.universe.isEmpty() -> "开始扫描"; state.complete -> "扫描已完成"; else -> "继续扫描" }
-        start.isEnabled = state.loaded && (!state.complete || state.running)
-        restart.isEnabled = state.loaded && !state.running && state.universe.isNotEmpty()
+        start.isEnabled = state.loaded && (state.running || (!state.complete && blocked == null && !oldRules))
+        restart.isEnabled = state.loaded && !state.running && state.universe.isNotEmpty() && blocked == null
         retry.visibility = if (state.failures > 0) View.VISIBLE else View.GONE
-        retry.isEnabled = !state.running
+        retry.isEnabled = state.loaded && !state.running && blocked == null && !oldRules
         empty.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
         empty.text = when {
             state.hits.isNotEmpty() -> "当前筛选条件下没有结果"
             state.running -> "尚未发现符合规则的突破，结果会陆续显示"
             state.complete && state.failures > 0 -> "已完成部分数据检测，暂无命中；失败项尚未判定"
             state.complete -> "本次可用数据中未发现符合规则的突破"
-            state.universe.isEmpty() -> "点击开始扫描，检测近五个已完成交易日的向上突破。离开页面自动暂停。"
+            state.universe.isEmpty() -> "点击开始扫描，检测近五个已完成交易日的向上突破。离开页面继续工作，可在通知栏暂停。"
             else -> "暂无命中，可继续完成扫描"
         }
         adapter.submit(shown)
