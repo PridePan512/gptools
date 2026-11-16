@@ -31,6 +31,10 @@
             android:label="@string/alert_rules_title"
             android:parentActivityName=".ui.MainActivity" />
         <activity android:name=".ui.box.BoxScanActivity" android:exported="false" />
+        <activity android:name=".ui.limit.LimitFlipActivity" android:exported="false" />
+        <activity android:name=".ui.limit.LimitFlipDetailActivity" android:exported="false" />
+        <service android:name=".ui.limit.LimitFlipService" android:exported="false"
+            android:foregroundServiceType="dataSync" android:stopWithTask="false" />
         <activity android:name=".ui.box.BoxSettingsActivity" android:exported="false" />
         <service android:name=".ui.box.BoxScanService" android:exported="false"
             android:foregroundServiceType="dataSync" android:stopWithTask="false" />

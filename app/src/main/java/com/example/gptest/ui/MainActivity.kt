@@ -101,6 +101,10 @@ class MainActivity : AppCompatActivity(), QuoteTabHost {
                 startActivity(Intent(this, com.example.gptest.ui.box.BoxScanActivity::class.java))
                 true
             }
+            R.id.action_limit_flip -> {
+                startActivity(Intent(this, com.example.gptest.ui.limit.LimitFlipActivity::class.java))
+                true
+            }
             R.id.action_alerts -> {
                 openAlerts()
                 true

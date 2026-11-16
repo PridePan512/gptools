@@ -25,11 +25,12 @@ class HistoryRepository {
         DailyHistory(closes, history.forwardAdjusted)
     }
 
-    fun fetchBars(code: String, count: Int = 320): Result<BarHistory> = runCatching {
+    fun fetchBars(code: String, count: Int = 320, forwardAdjust: Boolean = true): Result<BarHistory> = runCatching {
         require(count in 1..320)
         val normalized = requireNotNull(QuoteParser.normalizeStockCode(code))
         HistoryAccess.gate.blocked()?.let { throw it }
-        val url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=$normalized,day,,,$count,qfq"
+        val adjust = if (forwardAdjust) "qfq" else ""
+        val url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=$normalized,day,,,$count,$adjust"
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 8_000
             readTimeout = 8_000
@@ -44,7 +45,7 @@ class HistoryRepository {
             val root = JSONObject(body)
             check(root.getInt("code") == 0) { "History service error" }
             val stock = root.getJSONObject("data").getJSONObject(normalized)
-            val adjusted = stock.optJSONArray("qfqday")
+            val adjusted = if (forwardAdjust) stock.optJSONArray("qfqday") else null
             val rows = adjusted ?: stock.getJSONArray("day")
             val bars = (0 until rows.length()).map { index ->
                 val row = rows.getJSONArray(index)
