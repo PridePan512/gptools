@@ -97,6 +97,10 @@ class MainActivity : AppCompatActivity(), QuoteTabHost {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.action_community -> {
+                startActivity(Intent(this, com.example.gptest.ui.community.CommunityMonitorActivity::class.java))
+                true
+            }
             R.id.action_box_scan -> {
                 startActivity(Intent(this, com.example.gptest.ui.box.BoxScanActivity::class.java))
                 true

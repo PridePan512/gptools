@@ -21,4 +21,5 @@
         app:showAsAction="never" />
     <item android:id="@+id/action_box_scan" android:title="箱体检测" app:showAsAction="never" android:orderInCategory="9" />
     <item android:id="@+id/action_limit_flip" android:title="先涨停后跌停" app:showAsAction="never" android:orderInCategory="9" />
+    <item android:id="@+id/action_community" android:title="动态提醒" app:showAsAction="never" android:orderInCategory="8" />
 </menu>

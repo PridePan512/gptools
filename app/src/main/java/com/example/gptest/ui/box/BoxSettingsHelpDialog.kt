@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.fragment.app.DialogFragment
+import com.example.gptest.R
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -53,7 +54,7 @@ class BoxSettingsHelpDialog : DialogFragment() {
             setPadding(0, context.dp(12), 0, 0)
         })
         val scroll = ScrollView(context).apply {
-            id = 4201
+            id = R.id.boxHelpScroll
             addView(content)
         }
         helpContent = content
